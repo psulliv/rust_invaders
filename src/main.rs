@@ -105,19 +105,39 @@
 
 mod eighty_eighty_emulator;
 mod invaders_mem_utils;
-use eighty_eighty_emulator::debug_print_op_code;
+use eighty_eighty_emulator::{iterate_processor_state, ProcessorState};
 fn main() {
     let invaders_rom = invaders_mem_utils::create_invaders_memory_space()
         .expect("Couldn't open the space invaders ROM files");
 
-    println!("size of bytes : {}", invaders_rom.len());
+    let mut this_processor = ProcessorState::new();
 
-    let mut instruction_pointer: usize = 0;
-    let mut current_byte = invaders_rom[instruction_pointer];
-    while current_byte == 0x00 {
-        instruction_pointer += 1;
-        current_byte = invaders_rom[instruction_pointer];
+    loop {
+        iterate_processor_state(&mut this_processor, &invaders_rom);
     }
 
-    debug_print_op_code(current_byte);
+    // debug code, mid implementation
+    // println!("size of bytes : {}", invaders_rom.len());
+
+    // let mut instruction_pointer: usize = 0;
+    // let mut current_byte = invaders_rom[instruction_pointer];
+    // while current_byte == 0x00 {
+    //     instruction_pointer += 1;
+    //     current_byte = invaders_rom[instruction_pointer];
+    // }
+    // eighty_eighty_emulator::debug_print_op_code(current_byte);
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::invaders_mem_utils::create_invaders_memory_space;
+
+    use super::*;
+    #[test]
+    fn basic_nop_step() {
+        let mem_map = create_invaders_memory_space().unwrap();
+        let test_state = ProcessorState::new();
+        let next_state = eighty_eighty_emulator::iterate_processor_state(test_state, mem_map);
+        assert_eq!(test_state, test_state);
+    }
 }
