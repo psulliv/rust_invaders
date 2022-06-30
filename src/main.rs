@@ -135,9 +135,12 @@ mod tests {
     use super::*;
     #[test]
     fn basic_nop_step() {
+        // This tests the very first instruction in the space invaders ROM file
+        // which is a NOP
         let mem_map = create_invaders_memory_space().unwrap();
-        let test_state = ProcessorState::new();
-        let next_state = eighty_eighty_emulator::iterate_processor_state(test_state, mem_map);
-        assert_eq!(test_state, test_state);
+        let mut test_state = ProcessorState::new();
+        let next_state = eighty_eighty_emulator::iterate_processor_state(&mut test_state, &mem_map);
+        assert!(false);
+        // Todo: actually implement this test properly.
     }
 }

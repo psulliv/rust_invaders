@@ -2,7 +2,7 @@
 #![allow(unreachable_code)]
 #![allow(unused)]
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub struct ProcessorState {
     reg_a: u8,
     reg_b: u8,
