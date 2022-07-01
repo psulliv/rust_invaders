@@ -103,6 +103,28 @@
 //!
 //!	Way of out of proportion :P
 
+use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
+
+#[wasm_bindgen]
+extern {
+    fn alert(s: &str);
+}
+
+#[wasm_bindgen]
+pub fn start_keydown_listener() {
+    let window = web_sys::window().expect("no global `window` exists");
+    //let document = window.document().expect("should have a document on window");
+    //let canvas = document.get_element_by_id("display").unwrap().dyn_into::<web_sys::HtmlCanvasElement>().unwrap();
+    fn keydown_handler(event: web_sys::KeyboardEvent) {
+        alert(&event.code());
+    }
+    let closure = Closure::wrap(Box::new(keydown_handler) as Box<dyn FnMut(_)>);
+    window.add_event_listener_with_callback("keydown", closure.as_ref().unchecked_ref());
+    closure.forget();
+}
+
+/*
 mod debug_utils;
 mod eighty_eighty_emulator;
 mod space_invaders_rom;
@@ -119,3 +141,4 @@ fn main() {
     let this_processor = ProcessorState::new();
     emulation_loop(this_processor, &space_invaders_rom::SPACE_INVADERS_ROM);
 }
+*/
