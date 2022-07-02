@@ -9,7 +9,11 @@ pub struct ProcessorState {
     reg_c: u8,
     reg_d: u8,
     reg_e: u8,
+    reg_h: u8,
+    reg_l: u8,
+    stack_pointer: u16,
     prog_counter: usize,
+    memory: Vec<u8>,
     flags: u8,
 }
 
@@ -21,7 +25,11 @@ impl ProcessorState {
             reg_c: 0,
             reg_d: 0,
             reg_e: 0,
+            reg_h: 0,
+            reg_l: 0,
+            stack_pointer: 0,
             prog_counter: 0,
+            memory: vec![0; 4096],
             flags: 0,
         }
     }

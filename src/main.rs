@@ -105,16 +105,21 @@
 
 mod eighty_eighty_emulator;
 mod invaders_mem_utils;
-use eighty_eighty_emulator::{iterate_processor_state, ProcessorState};
+use eighty_eighty_emulator::ProcessorState;
+
+fn emulation_loop(mut this_processor: ProcessorState, invaders_rom: Vec<u8>) -> ! {
+    loop {
+        eighty_eighty_emulator::iterate_processor_state(&mut this_processor, &invaders_rom);
+    }
+}
+
 fn main() {
     let invaders_rom = invaders_mem_utils::create_invaders_memory_space()
         .expect("Couldn't open the space invaders ROM files");
 
-    let mut this_processor = ProcessorState::new();
+    let this_processor = ProcessorState::new();
 
-    loop {
-        iterate_processor_state(&mut this_processor, &invaders_rom);
-    }
+    emulation_loop(this_processor, invaders_rom);
 
     // debug code, mid implementation
     // println!("size of bytes : {}", invaders_rom.len());
