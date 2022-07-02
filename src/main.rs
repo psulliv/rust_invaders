@@ -108,7 +108,7 @@ mod space_invaders_rom;
 
 use eighty_eighty_emulator::ProcessorState;
 
-fn emulation_loop(mut this_processor: ProcessorState, invaders_rom: Vec<u8>) -> ! {
+fn emulation_loop(mut this_processor: ProcessorState, invaders_rom: &[u8; 8192]) -> ! {
     loop {
         eighty_eighty_emulator::iterate_processor_state(&mut this_processor, &invaders_rom);
     }
@@ -116,29 +116,5 @@ fn emulation_loop(mut this_processor: ProcessorState, invaders_rom: Vec<u8>) -> 
 
 fn main() {
     let this_processor = ProcessorState::new();
-    // emulation_loop(this_processor, invaders_rom);
-    // let mut instruction_pointer: usize = 0;
-    // let mut current_byte = invaders_rom[instruction_pointer];
-    // while current_byte == 0x00 {
-    //     instruction_pointer += 1;
-    //     current_byte = invaders_rom[instruction_pointer];
-    // }
-    // eighty_eighty_emulator::debug_print_op_code(current_byte);
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::invaders_mem_utils::create_invaders_memory_space;
-
-    use super::*;
-    #[test]
-    fn basic_nop_step() {
-        // This tests the very first instruction in the space invaders ROM file
-        // which is a NOP
-        let mem_map = create_invaders_memory_space().unwrap();
-        let mut test_state = ProcessorState::new();
-        let next_state = eighty_eighty_emulator::iterate_processor_state(&mut test_state, &mem_map);
-        assert!(false);
-        // Todo: actually implement this test properly.
-    }
+    emulation_loop(this_processor, &space_invaders_rom::SPACE_INVADERS_ROM);
 }

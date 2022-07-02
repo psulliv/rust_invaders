@@ -1066,7 +1066,7 @@ pub fn debug_print_op_code(opcode: u8) -> usize {
     }
 }
 
-pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &Vec<u8>) {
+pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &[u8; 8192]) {
     // get the next opcode at the current program counter
     let cur_instruction = mem_map[state.prog_counter];
     match cur_instruction {
@@ -2095,4 +2095,21 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &Vec<u8>) {
             1
         }
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::space_invaders_rom;
+    #[test]
+    fn basic_nop_step() {
+        // This tests the very first instruction in the space invaders ROM file
+        // which is a NOP
+        let mut test_state = ProcessorState::new();
+        iterate_processor_state(&mut test_state, &space_invaders_rom::SPACE_INVADERS_ROM);
+
+        // Not a real test, just a placeholder
+        assert!(test_state.reg_b == test_state.reg_a);
+        // Todo: actually implement this test properly.
+    }
 }
