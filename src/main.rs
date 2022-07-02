@@ -119,10 +119,10 @@ fn main() {
 
     let this_processor = ProcessorState::new();
 
-    emulation_loop(this_processor, invaders_rom);
+    // emulation_loop(this_processor, invaders_rom);
 
     // debug code, mid implementation
-    // println!("size of bytes : {}", invaders_rom.len());
+    println!("{:?}", invaders_rom);
 
     // let mut instruction_pointer: usize = 0;
     // let mut current_byte = invaders_rom[instruction_pointer];
