@@ -106,22 +106,54 @@
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
+
 #[wasm_bindgen]
 extern {
     fn alert(s: &str);
 }
 
 #[wasm_bindgen]
-pub fn start_keydown_listener() {
-    let window = web_sys::window().expect("no global `window` exists");
-    //let document = window.document().expect("should have a document on window");
-    //let canvas = document.get_element_by_id("display").unwrap().dyn_into::<web_sys::HtmlCanvasElement>().unwrap();
-    fn keydown_handler(event: web_sys::KeyboardEvent) {
-        alert(&event.code());
+struct KeyboardState {
+    coin: bool,
+    start: bool,
+    shoot: bool,
+    left: bool,
+    right: bool,
+}
+
+#[wasm_bindgen]
+pub fn keydown_handler(event: web_sys::KeyboardEvent) {
+    match event.key().as_str() {
+        "ArrowLeft" => alert("ArrowLeft down"),
+        "ArrowRight" => alert("ArrowRight down"),
+        "C" => alert("C down"),
+        "S" => alert("S down"),
+        " " => alert("Space down"),
+        other => alert(&event.key()),
     }
-    let closure = Closure::wrap(Box::new(keydown_handler) as Box<dyn FnMut(_)>);
-    window.add_event_listener_with_callback("keydown", closure.as_ref().unchecked_ref());
-    closure.forget();
+}
+
+#[wasm_bindgen]
+pub fn keyup_handler(event: web_sys::KeyboardEvent) {
+    let window = web_sys::window().expect("no global `window` exists");
+    let document = window.document().expect("should have a document on window");
+    let canvas = document.get_element_by_id("display").unwrap().dyn_into::<web_sys::HtmlCanvasElement>().unwrap();
+    let context = canvas.get_context("2d").unwrap().unwrap().dyn_into::<web_sys::CanvasRenderingContext2d>().unwrap();
+    context.fill_text(&event.key(), 10.0, 50.0).expect("unable to draw to canvas");
+    //alert(&event.key());
+}
+
+#[wasm_bindgen]
+pub fn start_keyboard_listeners() {
+    let window = web_sys::window().expect("no global `window` exists");
+
+    let keydown_closure = Closure::wrap(Box::new(keydown_handler) as Box<dyn FnMut(_)>);
+    window.add_event_listener_with_callback("keydown", keydown_closure.as_ref().unchecked_ref()).unwrap();
+    keydown_closure.forget();
+
+    let keyup_closure = Closure::wrap(Box::new(keyup_handler) as Box<dyn FnMut(_)>);
+    window.add_event_listener_with_callback("keyup", keyup_closure.as_ref().unchecked_ref()).unwrap();
+    keyup_closure.forget();
 }
 
 /*
