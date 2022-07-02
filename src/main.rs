@@ -104,7 +104,8 @@
 //!	Way of out of proportion :P
 
 mod eighty_eighty_emulator;
-mod invaders_mem_utils;
+mod space_invaders_rom;
+
 use eighty_eighty_emulator::ProcessorState;
 
 fn emulation_loop(mut this_processor: ProcessorState, invaders_rom: Vec<u8>) -> ! {
@@ -114,16 +115,8 @@ fn emulation_loop(mut this_processor: ProcessorState, invaders_rom: Vec<u8>) -> 
 }
 
 fn main() {
-    let invaders_rom = invaders_mem_utils::create_invaders_memory_space()
-        .expect("Couldn't open the space invaders ROM files");
-
     let this_processor = ProcessorState::new();
-
     // emulation_loop(this_processor, invaders_rom);
-
-    // debug code, mid implementation
-    println!("{:?}", invaders_rom);
-
     // let mut instruction_pointer: usize = 0;
     // let mut current_byte = invaders_rom[instruction_pointer];
     // while current_byte == 0x00 {
