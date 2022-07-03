@@ -57,8 +57,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &[u8; 8192])
             opcode_nop(state);
         }
         0x01 => {
-            panic!(" 	LXI B,D16	3		B <- byte 3, C <- byte 2");
-            // 3
+            opcode_lxi(state, mem_map);
         }
         0x02 => {
             panic!(" 	STAX B	1		(BC) <- A");
@@ -121,8 +120,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &[u8; 8192])
             // 1
         }
         0x11 => {
-            panic!(" 	LXI D,D16	3		D <- byte 3, E <- byte 2");
-            // 3
+            opcode_lxi(state, mem_map);
         }
         0x12 => {
             panic!(" 	STAX D	1		(DE) <- A");
@@ -185,8 +183,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &[u8; 8192])
             // 1
         }
         0x21 => {
-            panic!(" 	LXI H,D16	3		H <- byte 3, L <- byte 2");
-            // 3
+            opcode_lxi(state, mem_map);
         }
         0x22 => {
             panic!(" 	SHLD adr	3		(adr) <-L; (adr+1)<-H");
@@ -1114,28 +1111,34 @@ fn opcode_lxi(state: &mut ProcessorState, mem_map: &[u8; 8192]) {
     // This handles several register pairs so we will match against it's opcode
     // 0 | 0 | R | P | 0 | 0 | 0 | 1
     let cur_instruction = mem_map[state.prog_counter];
+    let second_byte = mem_map[state.prog_counter + 1];
+    let third_byte = mem_map[state.prog_counter + 2];
     // Masking and shifting so that we can use this as a match that looks similar
     // to the RP legend in the book.
     let rp_bits = (cur_instruction & 0b0011_0000) >> 4;
     match rp_bits {
         0b0000_0000 => {
             // register pair B-C
+            state.reg_b = third_byte;
+            state.reg_c = second_byte;
         }
         0b0000_0001 => {
             // register pair D-E
+            state.reg_d = third_byte;
+            state.reg_e = second_byte;
         }
         0b0000_0010 => {
             // register pair H-L
+            state.reg_h = third_byte;
+            state.reg_l = second_byte;
         }
         0b0000_0011 => {
             // register SP
+            state.stack_pointer = (third_byte as u16) << 8 | (second_byte as u16);
         }
         _ => {
             panic!("unhandled register pair bits in opcode_lxi");
         }
-    }
-    match mem_map[state.prog_counter] {
-        _ => panic!("opcode lxi failed to parse, check parent caller match arm"),
     }
 }
 
@@ -1201,13 +1204,55 @@ mod tests {
     }
 
     #[test]
-    fn lxi_step() {
+    fn lxi_step_bc() {
         let mut test_state = ProcessorState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
-        test_rom[0] = 0b0000_0001;
+        // register pair b-c is 00
+        test_rom[0] = (0b00 << 4) | 0b0000_0001;
         test_rom[1] = 0xff;
         test_rom[2] = 0xff;
+        iterate_processor_state(&mut test_state, &test_rom);
         assert_eq!(test_state.reg_b, test_rom[2]);
         assert_eq!(test_state.reg_c, test_rom[1]);
+    }
+
+    #[test]
+    fn lxi_step_de() {
+        let mut test_state = ProcessorState::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // register pair d-e is 01
+        test_rom[0] = (0b01 << 4) | 0b0000_0001;
+        test_rom[1] = 0xff;
+        test_rom[2] = 0xff;
+        iterate_processor_state(&mut test_state, &test_rom);
+        assert_eq!(test_state.reg_d, test_rom[2]);
+        assert_eq!(test_state.reg_e, test_rom[1]);
+    }
+    #[test]
+    fn lxi_step_hl() {
+        let mut test_state = ProcessorState::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // register pair h-l is 10
+        test_rom[0] = (0b10 << 4) | 0b0000_0001;
+        test_rom[1] = 0xff;
+        test_rom[2] = 0xff;
+        iterate_processor_state(&mut test_state, &test_rom);
+        assert_eq!(test_state.reg_h, test_rom[2]);
+        assert_eq!(test_state.reg_l, test_rom[1]);
+    }
+
+    #[test]
+    fn lxi_step_sp() {
+        let mut test_state = ProcessorState::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // register sp is 11
+        test_rom[0] = (0b11 << 4) | 0b0000_0001;
+        test_rom[1] = 0xff;
+        test_rom[2] = 0xff;
+        iterate_processor_state(&mut test_state, &test_rom);
+        assert_eq!(
+            test_state.stack_pointer,
+            ((test_rom[2] as u16) << 8) | (test_rom[1] as u16)
+        );
     }
 }
