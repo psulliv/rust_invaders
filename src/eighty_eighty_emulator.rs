@@ -53,7 +53,9 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &[u8; 8192])
     // get the next opcode at the current program counter
     let cur_instruction = mem_map[state.prog_counter];
     match cur_instruction {
-        0x00 => opcode_nop(state),
+        0x00 => {
+            opcode_nop(state);
+        }
         0x01 => {
             panic!(" 	LXI B,D16	3		B <- byte 3, C <- byte 2");
             // 3
@@ -247,7 +249,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &[u8; 8192])
             // 1
         }
         0x31 => {
-            panic!(" 	LXI SP, D16	3		SP.hi <- byte 3, SP.lo <- byte 2");
+            opcode_lxi(state, mem_map);
             // 3
         }
         0x32 => {
@@ -831,8 +833,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &[u8; 8192])
             // 3
         }
         0xc3 => {
-            panic!(" 	JMP adr	3		PC <= adr");
-            // 3
+            opcode_jmp(state, mem_map);
         }
         0xc4 => {
             panic!(" 	CNZ adr	3		if NZ, CALL adr");
@@ -1077,25 +1078,136 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &[u8; 8192])
     };
 }
 
+/// NOP (No op)
+/// No operation is performed. The registers and flags
+/// are unaffected.
 fn opcode_nop(state: &mut ProcessorState) {
+    // just increment the address to the next;
     state.prog_counter += 1;
 }
+
+/// JMP addr (Jump)
+/// (PC) ~ (byte 3) (byte 2)
+/// Control is transferred to the instruction whose ad-
+/// dress is specified in byte 3 and byte 2 of the current
+/// instruction.
+fn opcode_jmp(state: &mut ProcessorState, mem_map: &[u8; 8192]) {
+    // get the address to jump to, needs to be u16 since we shift 8 bits
+    let second_byte = mem_map[state.prog_counter + 1] as u16;
+    let third_byte = mem_map[state.prog_counter + 2] as u16;
+
+    // Need to be usize since it's used as an array index
+    let address = (third_byte << 8 | second_byte) as usize;
+    state.prog_counter = address;
+}
+
+/// LXI rp, data 16 (Load register pair immediate)
+/// (rh) ~ (byte 3),
+/// (rl) ~ (byte 2)
+/// Byte 3 of the instruction is moved into the high-order
+/// register (rh) of the register pair rp. Byte 2 of the in-
+/// struction is moved into the low-order register (rl) of
+/// the register pair rp.
+fn opcode_lxi(state: &mut ProcessorState, mem_map: &[u8; 8192]) {
+    // panic!(" 	LXI SP, D16	3		SP.hi <- byte 3, SP.lo <- byte 2");
+
+    // This handles several register pairs so we will match against it's opcode
+    // 0 | 0 | R | P | 0 | 0 | 0 | 1
+    let cur_instruction = mem_map[state.prog_counter];
+    // Masking and shifting so that we can use this as a match that looks similar
+    // to the RP legend in the book.
+    let rp_bits = (cur_instruction & 0b0011_0000) >> 4;
+    match rp_bits {
+        0b0000_0000 => {
+            // register pair B-C
+        }
+        0b0000_0001 => {
+            // register pair D-E
+        }
+        0b0000_0010 => {
+            // register pair H-L
+        }
+        0b0000_0011 => {
+            // register SP
+        }
+        _ => {
+            panic!("unhandled register pair bits in opcode_lxi");
+        }
+    }
+    match mem_map[state.prog_counter] {
+        _ => panic!("opcode lxi failed to parse, check parent caller match arm"),
+    }
+}
+
+// DOD or SSS REGISTER NAME
+// 111 A
+// 000 B
+// 001 C
+// 010 D
+// 011 E
+// 100 H
+// 101 L
+
+// Register pair bits
+// 00 B-C
+// 01 D-E
+// 10 H-L
+// 11 SP (not really a pair)
+
+// Todo: remove extra match branches in the iterate state function
+// since most of these opcodes use bits in the instruction to determine
+// register source and destinations this can be pared down to many fewer
+// operations and match arms. Instead of checking for equality in these arms
+// we would check for certain bits to be set, e.g. LXI instructions.
+
+// Todo: After implementing the operations necessary for space invaders to play
+// (or all of them) remove the braces in the match arms so that the return from
+// the opcode_<instruction> function goes straight to the match arm. Also, if we
+// don't implement certain instructions (aren't needed for to play the game) we
+// should remove their instructions from the match arms and include a catch all
+// instruction that panics
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::space_invaders_rom;
+
     #[test]
     fn basic_nop_step() {
-        // This tests the very first instruction in the space invaders ROM file
-        // which is a NOP
-
         let mut test_state = ProcessorState::new();
         let cur_instruction_address = test_state.prog_counter;
-
-        iterate_processor_state(&mut test_state, &space_invaders_rom::SPACE_INVADERS_ROM);
-
-        // Not a real test, just a placeholder
+        let test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        iterate_processor_state(&mut test_state, &test_rom);
         assert_eq!(test_state.prog_counter, cur_instruction_address + 1);
+    }
+
+    #[test]
+    fn basic_jmp_step() {
+        let mut test_state = ProcessorState::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // insert the jmp instruction
+        test_rom[0] = 0xc3;
+        // last address in the space
+        let test_address: u16 = (test_rom.len() - 1) as u16;
+        // putting something easy to recognize at the end
+        test_rom[test_address as usize] = 0xff;
+        // insert address in bytes 1 and 2 in little endian byte order
+        // we are explicitly truncating the bits by masking off as u8 here
+        // the high order bits and casting as u8
+        test_rom[1] = (test_address & 0b0000_0000_1111_1111) as u8;
+        test_rom[2] = (test_address >> 8) as u8;
+        iterate_processor_state(&mut test_state, &test_rom);
+        assert_eq!(test_address as usize, test_state.prog_counter);
+    }
+
+    #[test]
+    fn lxi_step() {
+        let mut test_state = ProcessorState::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b0000_0001;
+        test_rom[1] = 0xff;
+        test_rom[2] = 0xff;
+        assert_eq!(test_state.reg_b, test_rom[2]);
+        assert_eq!(test_state.reg_c, test_rom[1]);
     }
 }
