@@ -1116,6 +1116,7 @@ fn opcode_lxi(state: &mut ProcessorState, mem_map: &[u8; 8192]) {
     // Masking and shifting so that we can use this as a match that looks similar
     // to the RP legend in the book.
     let rp_bits = (cur_instruction & 0b0011_0000) >> 4;
+    state.prog_counter += 3;
     match rp_bits {
         0b0000_0000 => {
             // register pair B-C
@@ -1142,7 +1143,7 @@ fn opcode_lxi(state: &mut ProcessorState, mem_map: &[u8; 8192]) {
     }
 }
 
-// DOD or SSS REGISTER NAME
+// DDD or SSS REGISTER NAME
 // 111 A
 // 000 B
 // 001 C
@@ -1254,5 +1255,17 @@ mod tests {
             test_state.stack_pointer,
             ((test_rom[2] as u16) << 8) | (test_rom[1] as u16)
         );
+    }
+
+    #[test]
+    fn lxi_step_good_pc() {
+        let mut test_state = ProcessorState::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // register sp is 11
+        test_rom[0] = (0b11 << 4) | 0b0000_0001;
+        test_rom[1] = 0xff;
+        test_rom[2] = 0xff;
+        iterate_processor_state(&mut test_state, &test_rom);
+        assert_eq!(test_state.prog_counter, 3);
     }
 }
