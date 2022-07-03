@@ -1143,6 +1143,53 @@ fn opcode_lxi(state: &mut ProcessorState, mem_map: &[u8; 8192]) {
     }
 }
 
+/// MOV r, M (Move from memory)
+/// (r) ~ ((H) (L))
+/// The content of the memory location, whose address
+/// is in registers Hand L, is moved to register r.
+/// MOV M, r (Move to memory)
+/// ((H)(L))~ (r)
+/// The content of register r is moved to the memory lo-
+/// cation whose address is in registers Hand L.
+fn opcode_mov(state: &mut ProcessorState, mem_map: &[u8; 8192]) {
+    // 0 | 1 | D | D | D | 1 | 1 | 0
+    // or
+    // 0 | 1 | 1 | 1 | 0 | S | S | S
+
+    // test to see if this is a move to or from memory
+    let cur_instruction = mem_map[state.prog_counter];
+    let dest = cur_instruction & 0b00_111_000;
+    let src = cur_instruction & 0b00_000_111;
+    if dest == 0b00_110_000 {
+        // then this is a 0 | 1 | 1 | 1 | 0 | S | S | S
+        // format opcode and moving from `src` to memory
+        // in pair H-L
+
+        // Todo: figure out a way to make this readable
+        match src {
+            // A
+            0b111 => {}
+            // B
+            0b000 => {}
+            // C
+            0b001 => {}
+            // D
+            0b010 => {}
+            // E
+            0b011 => {}
+            // H
+            0b100 => {}
+            // L
+            0b101 => {}
+        }
+    } else if src == 0b_00_000_110 {
+        // then this is a 0 | 1 | D | D | D | 1 | 1 | 0
+        // format opcode, use dest
+    } else {
+        panic!("opcode_mov missing proper source or destination register format");
+    }
+}
+
 // DDD or SSS REGISTER NAME
 // 111 A
 // 000 B
