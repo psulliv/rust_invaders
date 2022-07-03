@@ -6,10 +6,10 @@
   </head>
   <body>
     <script type="module">
-      import init, {start_keyboard_listeners} from "./pkg/invaders.js";
+      import init, {start} from "./pkg/invaders.js";
       init()
         .then(() => {
-          start_keyboard_listeners()
+          start()
         });
     </script>
     <canvas id="display" width="448" height="512" style="border:1px solid #000000;">

@@ -103,22 +103,19 @@
 //!
 //!	Way of out of proportion :P
 
+mod debug_utils;
+mod eighty_eighty_emulator;
+mod space_invaders_rom;
+mod machine;
+
+use eighty_eighty_emulator::ProcessorState;
+use machine::MachineState;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-
 
 #[wasm_bindgen]
 extern {
     fn alert(s: &str);
-}
-
-#[wasm_bindgen]
-struct KeyboardState {
-    coin: bool,
-    start: bool,
-    shoot: bool,
-    left: bool,
-    right: bool,
 }
 
 #[wasm_bindgen]
@@ -156,21 +153,16 @@ pub fn start_keyboard_listeners() {
     keyup_closure.forget();
 }
 
-/*
-mod debug_utils;
-mod eighty_eighty_emulator;
-mod space_invaders_rom;
-
-use eighty_eighty_emulator::ProcessorState;
-
 fn emulation_loop(mut this_processor: ProcessorState, invaders_rom: &[u8; 8192]) -> ! {
     loop {
         eighty_eighty_emulator::iterate_processor_state(&mut this_processor, &invaders_rom);
     }
 }
 
-fn main() {
+#[wasm_bindgen]
+pub fn start() {
+    start_keyboard_listeners();
     let this_processor = ProcessorState::new();
+    let this_machine: MachineState = MachineState::new();
     emulation_loop(this_processor, &space_invaders_rom::SPACE_INVADERS_ROM);
 }
-*/
