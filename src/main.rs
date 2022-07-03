@@ -103,6 +103,7 @@
 //!
 //!	Way of out of proportion :P
 
+mod debug_utils;
 mod eighty_eighty_emulator;
 mod space_invaders_rom;
 
