@@ -1089,11 +1089,13 @@ mod tests {
     fn basic_nop_step() {
         // This tests the very first instruction in the space invaders ROM file
         // which is a NOP
+
         let mut test_state = ProcessorState::new();
+        let cur_instruction_address = test_state.prog_counter;
+
         iterate_processor_state(&mut test_state, &space_invaders_rom::SPACE_INVADERS_ROM);
 
         // Not a real test, just a placeholder
-        assert!(test_state.reg_b == test_state.reg_a);
-        // Todo: actually implement this test properly.
+        assert_eq!(test_state.prog_counter, cur_instruction_address + 1);
     }
 }
