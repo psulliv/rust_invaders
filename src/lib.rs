@@ -112,6 +112,7 @@ use eighty_eighty_emulator::ProcessorState;
 use std::sync::mpsc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
+use web_sys::console;
 
 fn key_action_handler(
     event: web_sys::KeyboardEvent,
@@ -153,14 +154,20 @@ fn emulation_loop(mut this_processor: ProcessorState, invaders_rom: &[u8; 8192])
 
 #[wasm_bindgen]
 pub fn start() {
+    // Log rust panic messages to browser dev console.
     #[cfg(feature = "console_error_panic_hook")]
     console_error_panic_hook::set_once();
+
     let (key_up_tx, rx): (mpsc::Sender<(String, bool)>, mpsc::Receiver<(String, bool)>) =
         mpsc::channel();
     let key_down_tx = key_up_tx.clone();
     start_keyboard_listeners(key_up_tx, key_down_tx);
-    let this_processor = ProcessorState::new();
+    if let Ok(msg) = rx.try_recv() {
+        /*Todo: Use the contents of msg to update machine state,
+        Move this block into emulation loop. */
+        console::log_1(&msg.0.into());
+    }
 
-    //let this_machine: MachineState = MachineState::new();
+    let this_processor = ProcessorState::new();
     emulation_loop(this_processor, &space_invaders_rom::SPACE_INVADERS_ROM);
 }
