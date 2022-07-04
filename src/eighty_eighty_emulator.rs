@@ -3,6 +3,9 @@
 #![allow(unused)]
 
 use bitflags::bitflags;
+use std::ops::{Index, IndexMut};
+
+use crate::space_invaders_rom;
 
 bitflags! {
     struct ConditionFlags: u8 {
@@ -25,7 +28,6 @@ pub struct ProcessorState {
     reg_l: u8,
     stack_pointer: u16,
     prog_counter: usize,
-    memory: Vec<u8>,
     flags: ConditionFlags,
 }
 
@@ -41,7 +43,6 @@ impl ProcessorState {
             reg_l: 0,
             stack_pointer: 0,
             prog_counter: 0,
-            memory: vec![0; 4096],
             flags: ConditionFlags {
                 bits: (0b0000_0000),
             },
@@ -49,7 +50,39 @@ impl ProcessorState {
     }
 }
 
-pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &[u8; 8192]) {
+pub struct SpaceInvadersMemMap {
+    rom: [u8; 8192],
+    rw_mem: Vec<u8>,
+}
+
+impl SpaceInvadersMemMap {
+    pub fn new() -> Self {
+        SpaceInvadersMemMap {
+            rom: space_invaders_rom::SPACE_INVADERS_ROM,
+            rw_mem: vec![0; 4096],
+        }
+    }
+}
+
+// Todo: implement indexing for the mem map
+
+impl Index<usize> for SpaceInvadersMemMap {
+    type Output = u8;
+    fn index(&self, idx: usize) -> &Self::Output {
+        &0
+    }
+}
+
+impl IndexMut<usize> for SpaceInvadersMemMap {
+    fn index_mut(&mut self, idx: usize) -> &mut Self::Output {
+        &mut 0
+    }
+}
+
+pub fn iterate_processor_state<T>(state: &mut ProcessorState, mem_map: &mut T)
+where
+    T: Index<usize> + IndexMut<usize>,
+{
     // get the next opcode at the current program counter
     let cur_instruction = mem_map[state.prog_counter];
     match cur_instruction {
@@ -1181,6 +1214,7 @@ fn opcode_mov(state: &mut ProcessorState, mem_map: &[u8; 8192]) {
             0b100 => {}
             // L
             0b101 => {}
+            _ => {}
         }
     } else if src == 0b_00_000_110 {
         // then this is a 0 | 1 | D | D | D | 1 | 1 | 0

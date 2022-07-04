@@ -111,7 +111,7 @@ use eighty_eighty_emulator::ProcessorState;
 
 fn emulation_loop(mut this_processor: ProcessorState, invaders_rom: &[u8; 8192]) -> ! {
     loop {
-        eighty_eighty_emulator::iterate_processor_state(&mut this_processor, &invaders_rom);
+        eighty_eighty_emulator::iterate_processor_state(&mut this_processor, &mut invaders_rom);
     }
 }
 
