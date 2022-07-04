@@ -153,6 +153,8 @@ fn emulation_loop(mut this_processor: ProcessorState, invaders_rom: &[u8; 8192])
 
 #[wasm_bindgen]
 pub fn start() {
+    #[cfg(feature = "console_error_panic_hook")]
+    console_error_panic_hook::set_once();
     let (key_up_tx, rx): (mpsc::Sender<(String, bool)>, mpsc::Receiver<(String, bool)>) =
         mpsc::channel();
     let key_down_tx = key_up_tx.clone();
