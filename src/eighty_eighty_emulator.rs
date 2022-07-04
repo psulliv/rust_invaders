@@ -118,8 +118,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0x06 => {
-            panic!(" 	MVI B, D8	2		B <- byte 2");
-            // 2
+            opcode_mvi(state, mem_map);
         }
         0x07 => {
             panic!(" 	RLC	1	CY	A = A << 1; bit 0 = prev bit 7; CY = prev bit 7");
@@ -150,8 +149,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0x0e => {
-            panic!(" 	MVI C,D8	2		C <- byte 2");
-            // 2
+            opcode_mvi(state, mem_map);
         }
         0x0f => {
             panic!(" 	RRC	1	CY	A = A >> 1; bit 7 = prev bit 0; CY = prev bit 0");
@@ -181,8 +179,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0x16 => {
-            panic!(" 	MVI D, D8	2		D <- byte 2");
-            // 2
+            opcode_mvi(state, mem_map);
         }
         0x17 => {
             panic!(" 	RAL	1	CY	A = A << 1; bit 0 = prev CY; CY = prev bit 7");
@@ -213,8 +210,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0x1e => {
-            panic!(" 	MVI E,D8	2		E <- byte 2");
-            // 2
+            opcode_mvi(state, mem_map);
         }
         0x1f => {
             panic!(" 	RAR	1	CY	A = A >> 1; bit 7 = prev bit 7; CY = prev bit 0");
@@ -244,8 +240,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0x26 => {
-            panic!(" 	MVI H,D8	2		H <- byte 2");
-            // 1
+            opcode_mvi(state, mem_map);
         }
         0x27 => {
             panic!(" 	DAA	1		special");
@@ -276,8 +271,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0x2e => {
-            panic!(" 	MVI L, D8	2		L <- byte 2");
-            // 2
+            opcode_mvi(state, mem_map);
         }
         0x2f => {
             panic!(" 	CMA	1		A <- !A");
@@ -308,8 +302,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0x36 => {
-            panic!(" 	MVI M,D8	2		(HL) <- byte 2");
-            // 2
+            opcode_mvi(state, mem_map);
         }
         0x37 => {
             panic!(" 	STC	1	CY	CY = 1");
@@ -340,8 +333,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0x3e => {
-            panic!(" 	MVI A,D8	2		A <- byte 2");
-            // 2
+            opcode_mvi(state, mem_map);
         }
         0x3f => {
             panic!(" 	CMC	1	CY	CY=!CY");
@@ -1193,16 +1185,19 @@ fn opcode_lxi(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
 /// ((H)(L))~ (r)
 /// The content of register r is moved to the memory lo-
 /// cation whose address is in registers Hand L.
-fn opcode_mov(state: &mut ProcessorState, mem_map: &[u8; 8192]) {
+fn opcode_mov(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
+    // Todo: Work in progress!
+    panic!("Not implemented yet!");
     // 0 | 1 | D | D | D | 1 | 1 | 0
     // or
     // 0 | 1 | 1 | 1 | 0 | S | S | S
 
     // test to see if this is a move to or from memory
+
     let cur_instruction = mem_map[state.prog_counter];
-    let dest = cur_instruction & 0b00_111_000;
+    let dest = (cur_instruction & 0b00_111_000) >> 3;
     let src = cur_instruction & 0b00_000_111;
-    if dest == 0b00_110_000 {
+    if dest == 0b110 {
         // then this is a 0 | 1 | 1 | 1 | 0 | S | S | S
         // format opcode and moving from `src` to memory
         // in pair H-L
@@ -1225,11 +1220,71 @@ fn opcode_mov(state: &mut ProcessorState, mem_map: &[u8; 8192]) {
             0b101 => {}
             _ => {}
         }
-    } else if src == 0b_00_000_110 {
+    } else if src == 0b110 {
         // then this is a 0 | 1 | D | D | D | 1 | 1 | 0
         // format opcode, use dest
     } else {
         panic!("opcode_mov missing proper source or destination register format");
+    }
+}
+
+/// MVI r, data (Move Immediate)
+/// (r) ~ (byte 2)
+/// The content of byte 2 of the instruction is moved to
+/// register r.
+/// MVI M, data (Move to memory immediate)
+/// ((H) (L)) ~ (byte 2)
+/// The content of byte 2 of the instruction is moved to
+/// the memory location whose address is in registers H
+/// and L.
+fn opcode_mvi(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
+    // 0 | 0 | D | D | D | 1 | 1 | 0
+    // ^^^ move to register immediate
+    // or
+    // 0 | 0 | 1 | 1 | 0 | 1 | 1 | 0
+    // ^^^ move to memory immediate
+
+    let dest = (mem_map[state.prog_counter] & 0b00_111_000) >> 3;
+    let second_byte = mem_map[state.prog_counter + 1];
+    state.prog_counter += 2;
+    match dest {
+        // A
+        0b111 => {
+            state.reg_a = second_byte;
+        }
+        // B
+        0b000 => {
+            state.reg_b = second_byte;
+        }
+        // C
+        0b001 => {
+            state.reg_c = second_byte;
+        }
+        // D
+        0b010 => {
+            state.reg_d = second_byte;
+        }
+        // E
+        0b011 => {
+            state.reg_e = second_byte;
+        }
+        // H
+        0b100 => {
+            state.reg_h = second_byte;
+        }
+        // L
+        0b101 => {
+            state.reg_l = second_byte;
+        }
+        // memory
+        0b110 => {
+            // Get address from reg pair H-L
+            let address = (((state.reg_h as u16) << 8) | state.reg_l as u16) as usize;
+            mem_map[address] = second_byte;
+        }
+        _ => {
+            panic!("invalid register bits in opcode_mvi");
+        }
     }
 }
 
