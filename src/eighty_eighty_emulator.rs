@@ -51,7 +51,7 @@ impl ProcessorState {
 }
 
 pub struct SpaceInvadersMemMap {
-    rom: [u8; 8192],
+    rom: [u8; space_invaders_rom::SPACE_INVADERS_ROM.len()],
     rw_mem: Vec<u8>,
 }
 
@@ -69,20 +69,29 @@ impl SpaceInvadersMemMap {
 impl Index<usize> for SpaceInvadersMemMap {
     type Output = u8;
     fn index(&self, idx: usize) -> &Self::Output {
-        &0
+        if idx < 8192 {
+            return &self.rom[idx];
+        } else {
+            return &self.rw_mem[idx];
+        }
     }
 }
 
 impl IndexMut<usize> for SpaceInvadersMemMap {
     fn index_mut(&mut self, idx: usize) -> &mut Self::Output {
-        &mut 0
+        if idx < 8192 {
+            if cfg!(test) {
+                return &mut self.rom[idx];
+            } else {
+                panic!("Attempted to mutate ROM");
+            }
+        } else {
+            return &mut self.rw_mem[idx];
+        }
     }
 }
 
-pub fn iterate_processor_state<T>(state: &mut ProcessorState, mem_map: &mut T)
-where
-    T: Index<usize> + IndexMut<usize>,
-{
+pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     // get the next opcode at the current program counter
     let cur_instruction = mem_map[state.prog_counter];
     match cur_instruction {
@@ -1121,7 +1130,7 @@ fn opcode_nop(state: &mut ProcessorState) {
 /// Control is transferred to the instruction whose ad-
 /// dress is specified in byte 3 and byte 2 of the current
 /// instruction.
-fn opcode_jmp(state: &mut ProcessorState, mem_map: &[u8; 8192]) {
+fn opcode_jmp(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     // get the address to jump to, needs to be u16 since we shift 8 bits
     let second_byte = mem_map[state.prog_counter + 1] as u16;
     let third_byte = mem_map[state.prog_counter + 2] as u16;
@@ -1138,7 +1147,7 @@ fn opcode_jmp(state: &mut ProcessorState, mem_map: &[u8; 8192]) {
 /// register (rh) of the register pair rp. Byte 2 of the in-
 /// struction is moved into the low-order register (rl) of
 /// the register pair rp.
-fn opcode_lxi(state: &mut ProcessorState, mem_map: &[u8; 8192]) {
+fn opcode_lxi(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     // panic!(" 	LXI SP, D16	3		SP.hi <- byte 3, SP.lo <- byte 2");
 
     // This handles several register pairs so we will match against it's opcode
@@ -1261,14 +1270,17 @@ mod tests {
     fn basic_nop_step() {
         let mut test_state = ProcessorState::new();
         let cur_instruction_address = test_state.prog_counter;
-        let test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
-        iterate_processor_state(&mut test_state, &test_rom);
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let test_rom = [0; 8192];
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.prog_counter, cur_instruction_address + 1);
     }
 
     #[test]
     fn basic_jmp_step() {
         let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
         // insert the jmp instruction
         test_rom[0] = 0xc3;
@@ -1281,19 +1293,22 @@ mod tests {
         // the high order bits and casting as u8
         test_rom[1] = (test_address & 0b0000_0000_1111_1111) as u8;
         test_rom[2] = (test_address >> 8) as u8;
-        iterate_processor_state(&mut test_state, &test_rom);
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_address as usize, test_state.prog_counter);
     }
 
     #[test]
     fn lxi_step_bc() {
         let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
         // register pair b-c is 00
         test_rom[0] = (0b00 << 4) | 0b0000_0001;
         test_rom[1] = 0xff;
         test_rom[2] = 0xff;
-        iterate_processor_state(&mut test_state, &test_rom);
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.reg_b, test_rom[2]);
         assert_eq!(test_state.reg_c, test_rom[1]);
     }
@@ -1301,24 +1316,28 @@ mod tests {
     #[test]
     fn lxi_step_de() {
         let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
         // register pair d-e is 01
         test_rom[0] = (0b01 << 4) | 0b0000_0001;
         test_rom[1] = 0xff;
         test_rom[2] = 0xff;
-        iterate_processor_state(&mut test_state, &test_rom);
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.reg_d, test_rom[2]);
         assert_eq!(test_state.reg_e, test_rom[1]);
     }
     #[test]
     fn lxi_step_hl() {
         let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
         // register pair h-l is 10
         test_rom[0] = (0b10 << 4) | 0b0000_0001;
         test_rom[1] = 0xff;
         test_rom[2] = 0xff;
-        iterate_processor_state(&mut test_state, &test_rom);
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.reg_h, test_rom[2]);
         assert_eq!(test_state.reg_l, test_rom[1]);
     }
@@ -1326,12 +1345,14 @@ mod tests {
     #[test]
     fn lxi_step_sp() {
         let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
         // register sp is 11
         test_rom[0] = (0b11 << 4) | 0b0000_0001;
         test_rom[1] = 0xff;
         test_rom[2] = 0xff;
-        iterate_processor_state(&mut test_state, &test_rom);
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(
             test_state.stack_pointer,
             ((test_rom[2] as u16) << 8) | (test_rom[1] as u16)
@@ -1341,12 +1362,14 @@ mod tests {
     #[test]
     fn lxi_step_good_pc() {
         let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
         // register sp is 11
         test_rom[0] = (0b11 << 4) | 0b0000_0001;
         test_rom[1] = 0xff;
         test_rom[2] = 0xff;
-        iterate_processor_state(&mut test_state, &test_rom);
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.prog_counter, 3);
     }
 }
