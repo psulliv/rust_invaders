@@ -1427,4 +1427,31 @@ mod tests {
         iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.prog_counter, 3);
     }
+
+    #[test]
+    fn mvi_step_reg_a() {}
+
+    #[test]
+    fn mvi_step_reg_b() {}
+
+    #[test]
+    fn mvi_step_reg_c() {}
+
+    #[test]
+    fn mvi_step_reg_d() {}
+
+    #[test]
+    fn mvi_step_reg_e() {}
+
+    #[test]
+    fn mvi_step_reg_h() {}
+
+    #[test]
+    fn mvi_step_reg_l() {}
+
+    #[test]
+    fn mvi_step_mem() {}
+
+    #[test]
+    fn mvi_step_good_pc() {}
 }
