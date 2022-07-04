@@ -105,51 +105,43 @@
 
 mod debug_utils;
 mod eighty_eighty_emulator;
-mod space_invaders_rom;
 mod machine;
+mod space_invaders_rom;
 
 use eighty_eighty_emulator::ProcessorState;
-use machine::MachineState;
+use std::sync::mpsc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
-#[wasm_bindgen]
-extern {
-    fn alert(s: &str);
+fn key_action_handler(
+    event: web_sys::KeyboardEvent,
+    channel: &mpsc::Sender<(String, bool)>,
+) {
+    let is_down = event.type_().eq("keydown");
+    let message = (event.key(), is_down);
+    channel.send(message).unwrap();
 }
 
-#[wasm_bindgen]
-pub fn keydown_handler(event: web_sys::KeyboardEvent) {
-    match event.key().as_str() {
-        "ArrowLeft" => alert("ArrowLeft down"),
-        "ArrowRight" => alert("ArrowRight down"),
-        "C" => alert("C down"),
-        "S" => alert("S down"),
-        " " => alert("Space down"),
-        other => alert(&event.key()),
-    }
-}
-
-#[wasm_bindgen]
-pub fn keyup_handler(event: web_sys::KeyboardEvent) {
-    let window = web_sys::window().expect("no global `window` exists");
-    let document = window.document().expect("should have a document on window");
-    let canvas = document.get_element_by_id("display").unwrap().dyn_into::<web_sys::HtmlCanvasElement>().unwrap();
-    let context = canvas.get_context("2d").unwrap().unwrap().dyn_into::<web_sys::CanvasRenderingContext2d>().unwrap();
-    context.fill_text(&event.key(), 10.0, 50.0).expect("unable to draw to canvas");
-    //alert(&event.key());
-}
-
-#[wasm_bindgen]
-pub fn start_keyboard_listeners() {
+fn start_keyboard_listeners(
+    key_up_tx: mpsc::Sender<(String, bool)>,
+    key_down_tx: mpsc::Sender<(String, bool)>,
+) {
     let window = web_sys::window().expect("no global `window` exists");
 
-    let keydown_closure = Closure::wrap(Box::new(keydown_handler) as Box<dyn FnMut(_)>);
-    window.add_event_listener_with_callback("keydown", keydown_closure.as_ref().unchecked_ref()).unwrap();
+    let keydown_closure = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| {
+        key_action_handler(event, &key_down_tx)
+    }) as Box<dyn FnMut(_)>);
+    window
+        .add_event_listener_with_callback("keydown", keydown_closure.as_ref().unchecked_ref())
+        .unwrap();
     keydown_closure.forget();
 
-    let keyup_closure = Closure::wrap(Box::new(keyup_handler) as Box<dyn FnMut(_)>);
-    window.add_event_listener_with_callback("keyup", keyup_closure.as_ref().unchecked_ref()).unwrap();
+    let keyup_closure = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| {
+        key_action_handler(event, &key_up_tx)
+    }) as Box<dyn FnMut(_)>);
+    window
+        .add_event_listener_with_callback("keyup", keyup_closure.as_ref().unchecked_ref())
+        .unwrap();
     keyup_closure.forget();
 }
 
@@ -161,8 +153,12 @@ fn emulation_loop(mut this_processor: ProcessorState, invaders_rom: &[u8; 8192])
 
 #[wasm_bindgen]
 pub fn start() {
-    start_keyboard_listeners();
+    let (key_up_tx, rx): (mpsc::Sender<(String, bool)>, mpsc::Receiver<(String, bool)>) =
+        mpsc::channel();
+    let key_down_tx = key_up_tx.clone();
+    start_keyboard_listeners(key_up_tx, key_down_tx);
     let this_processor = ProcessorState::new();
-    let this_machine: MachineState = MachineState::new();
+
+    //let this_machine: MachineState = MachineState::new();
     emulation_loop(this_processor, &space_invaders_rom::SPACE_INVADERS_ROM);
 }

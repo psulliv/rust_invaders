@@ -1,3 +1,6 @@
+// Todo: take warning blocker out
+#![allow(unused)]
+
 // Ports:    
 // Read 1    
 // BIT 0   coin (0 when active)    
@@ -39,6 +42,7 @@ struct PortState {
     write_port_4: u8,
 }
 
+#[derive(Clone, Copy)]
 pub enum Button {
     P1Start,
     P2Start,
