@@ -59,7 +59,7 @@ impl SpaceInvadersMemMap {
     pub fn new() -> Self {
         SpaceInvadersMemMap {
             rom: space_invaders_rom::SPACE_INVADERS_ROM,
-            rw_mem: vec![1; 4096],
+            rw_mem: vec![0; 4096],
         }
     }
 }
