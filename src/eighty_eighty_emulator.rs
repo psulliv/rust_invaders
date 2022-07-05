@@ -59,34 +59,32 @@ impl SpaceInvadersMemMap {
     pub fn new() -> Self {
         SpaceInvadersMemMap {
             rom: space_invaders_rom::SPACE_INVADERS_ROM,
-            rw_mem: vec![0; 4096],
+            rw_mem: vec![1; 4096],
         }
     }
 }
 
-// Todo: implement indexing for the mem map
-
 impl Index<usize> for SpaceInvadersMemMap {
     type Output = u8;
     fn index(&self, idx: usize) -> &Self::Output {
-        if idx < 8192 {
+        if idx < space_invaders_rom::SPACE_INVADERS_ROM.len() {
             return &self.rom[idx];
         } else {
-            return &self.rw_mem[idx];
+            return &self.rw_mem[idx - space_invaders_rom::SPACE_INVADERS_ROM.len()];
         }
     }
 }
 
 impl IndexMut<usize> for SpaceInvadersMemMap {
     fn index_mut(&mut self, idx: usize) -> &mut Self::Output {
-        if idx < 8192 {
+        if idx < space_invaders_rom::SPACE_INVADERS_ROM.len() {
             if cfg!(test) {
                 return &mut self.rom[idx];
             } else {
                 panic!("Attempted to mutate ROM");
             }
         } else {
-            return &mut self.rw_mem[idx];
+            return &mut self.rw_mem[idx - space_invaders_rom::SPACE_INVADERS_ROM.len()];
         }
     }
 }
@@ -1109,6 +1107,26 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
     };
 }
 
+/// CALL
+/// addr (Call)
+/// ((SP) - 1) ~ (PCH)
+/// ((SP) - 2) ~ (PCl)
+/// (SP) ~ (SP) - 2
+/// (PC) ~ (byte 3) (byte 2)
+/// The high-order eight bits of the next instruction ad-
+/// dress are moved to the memory location whose
+/// address is one less than the content of register SP.
+/// The low-order eight bits of the next instruction ad-
+/// dress are moved to the memory location whose
+/// address is two less than the content of register SP.
+/// The content of register SP is decremented by 2. Con-
+/// trol is transferred to the instruction whose address is
+/// specified in byte 3 and byte 2 of the current
+/// instruction.
+fn opcode_call(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
+    // 1 | 1 | 0 | 0 | 1 | 1 | 0 | 1
+}
+
 /// NOP (No op)
 /// No operation is performed. The registers and flags
 /// are unaffected.
@@ -1316,6 +1334,15 @@ fn opcode_mvi(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
 // should remove their instructions from the match arms and include a catch all
 // instruction that panics
 
+// Todo: figure out a way to make certain pieces of the test setup common like python's
+// <TestCase>.setUp().
+
+// Todo: Make the variable names, the tests, and the memory portion generic over
+// potential other 8080 emulation uses. When the IO ports come around as something
+// to implement come up with some sort of API to access those. This may be impossible
+// since we couldn't really take a ROM input given our platform of web assembly but
+// can certainly be a stretch goal.
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1429,29 +1456,123 @@ mod tests {
     }
 
     #[test]
-    fn mvi_step_reg_a() {}
+    fn mvi_step_reg_a() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // 111 is a
+        test_rom[0] = 0b00_000_110 | (0b111 << 3);
+        test_rom[1] = 0xff;
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0xff);
+    }
 
     #[test]
-    fn mvi_step_reg_b() {}
+    fn mvi_step_reg_b() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // 000 is b
+        test_rom[0] = 0b00_000_110 | (0b000 << 3);
+        test_rom[1] = 0xff;
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_b, 0xff);
+    }
 
     #[test]
-    fn mvi_step_reg_c() {}
+    fn mvi_step_reg_c() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // 001 is c
+        test_rom[0] = 0b00_000_110 | (0b001 << 3);
+        test_rom[1] = 0xff;
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_c, 0xff);
+    }
 
     #[test]
-    fn mvi_step_reg_d() {}
+    fn mvi_step_reg_d() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // 010 is d
+        test_rom[0] = 0b00_000_110 | (0b010 << 3);
+        test_rom[1] = 0xff;
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_d, 0xff);
+    }
 
     #[test]
-    fn mvi_step_reg_e() {}
+    fn mvi_step_reg_e() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // 011 is e
+        test_rom[0] = 0b00_000_110 | (0b011 << 3);
+        test_rom[1] = 0xff;
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_e, 0xff);
+    }
 
     #[test]
-    fn mvi_step_reg_h() {}
+    fn mvi_step_reg_h() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // 100 is h
+        test_rom[0] = 0b00_000_110 | (0b100 << 3);
+        test_rom[1] = 0xff;
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_h, 0xff);
+    }
 
     #[test]
-    fn mvi_step_reg_l() {}
+    fn mvi_step_reg_l() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // 010 is l
+        test_rom[0] = 0b00_000_110 | (0b101 << 3);
+        test_rom[1] = 0xff;
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_l, 0xff);
+    }
 
     #[test]
-    fn mvi_step_mem() {}
+    fn mvi_step_mem() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // 110 is memory
+        test_rom[0] = 0b00_000_110 | (0b110 << 3);
+        test_rom[1] = 0xff;
+        test_state.reg_h = ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) >> 8) as u8;
+        test_state.reg_l = ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) & 0x00ff) as u8;
+        si_mem.rom = test_rom;
+        let address = iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(si_mem[space_invaders_rom::SPACE_INVADERS_ROM.len()], 0xff);
+    }
 
     #[test]
-    fn mvi_step_good_pc() {}
+    fn mvi_step_good_pc() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // 110 is memory
+        test_rom[0] = 0b00_000_110 | (0b110 << 3);
+        test_rom[1] = 0xff;
+        test_state.reg_h = ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) >> 8) as u8;
+        test_state.reg_l = ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) & 0x00ff) as u8;
+        si_mem.rom = test_rom;
+        let address = iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.prog_counter, 2);
+    }
 }
