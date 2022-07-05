@@ -41,7 +41,7 @@ impl ProcessorState {
             reg_e: 0,
             reg_h: 0,
             reg_l: 0,
-            stack_pointer: 0,
+            stack_pointer: 0x23ff,
             prog_counter: 0,
             flags: ConditionFlags {
                 bits: (0b0000_0000),
@@ -1576,3 +1576,4 @@ mod tests {
         assert_eq!(test_state.prog_counter, 2);
     }
 }
+     
