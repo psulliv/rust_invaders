@@ -27,7 +27,7 @@ pub struct ProcessorState {
     reg_h: u8,
     reg_l: u8,
     stack_pointer: u16,
-    prog_counter: usize,
+    prog_counter: u16,
     flags: ConditionFlags,
 }
 
@@ -64,27 +64,29 @@ impl SpaceInvadersMemMap {
     }
 }
 
-impl Index<usize> for SpaceInvadersMemMap {
+impl Index<u16> for SpaceInvadersMemMap {
     type Output = u8;
-    fn index(&self, idx: usize) -> &Self::Output {
-        if idx < space_invaders_rom::SPACE_INVADERS_ROM.len() {
-            return &self.rom[idx];
+    fn index(&self, idx: u16) -> &Self::Output {
+        if idx < (space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) {
+            return &self.rom[idx as usize];
         } else {
-            return &self.rw_mem[idx - space_invaders_rom::SPACE_INVADERS_ROM.len()];
+            return &self.rw_mem
+                [(idx - space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) as usize];
         }
     }
 }
 
-impl IndexMut<usize> for SpaceInvadersMemMap {
-    fn index_mut(&mut self, idx: usize) -> &mut Self::Output {
-        if idx < space_invaders_rom::SPACE_INVADERS_ROM.len() {
+impl IndexMut<u16> for SpaceInvadersMemMap {
+    fn index_mut(&mut self, idx: u16) -> &mut Self::Output {
+        if idx < (space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) {
             if cfg!(test) {
-                return &mut self.rom[idx];
+                return &mut self.rom[idx as usize];
             } else {
                 panic!("Attempted to mutate ROM");
             }
         } else {
-            return &mut self.rw_mem[idx - space_invaders_rom::SPACE_INVADERS_ROM.len()];
+            return &mut self.rw_mem
+                [(idx - space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) as usize];
         }
     }
 }
@@ -1107,12 +1109,11 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
     };
 }
 
-/// CALL
-/// addr (Call)
-/// ((SP) - 1) ~ (PCH)
-/// ((SP) - 2) ~ (PCl)
-/// (SP) ~ (SP) - 2
-/// (PC) ~ (byte 3) (byte 2)
+/// CALL addr
+/// ((SP) - 1) ~ (PCH) [program counter high bits]
+/// ((SP) - 2) ~ (PCl) [program counter low bits]
+/// (SP) ~ (SP) - 2 [reduce current stack pointer by two]
+/// (PC) ~ (byte 3) (byte 2) [move byte 3 and 2 to the program counter]
 /// The high-order eight bits of the next instruction ad-
 /// dress are moved to the memory location whose
 /// address is one less than the content of register SP.
@@ -1125,6 +1126,9 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
 /// instruction.
 fn opcode_call(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     // 1 | 1 | 0 | 0 | 1 | 1 | 0 | 1
+    mem_map[state.stack_pointer - 1] = ((state.prog_counter as u16) >> 8) as u8;
+    // I should really look into the Rust std lib to figure out what the proper way to cut up bits is
+    mem_map[state.stack_pointer - 2] = ((state.prog_counter as u16) & 0b0000_0000_1111_1111) as u8;
 }
 
 /// NOP (No op)
@@ -1142,11 +1146,11 @@ fn opcode_nop(state: &mut ProcessorState) {
 /// instruction.
 fn opcode_jmp(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     // get the address to jump to, needs to be u16 since we shift 8 bits
-    let second_byte = mem_map[state.prog_counter + 1] as u16;
-    let third_byte = mem_map[state.prog_counter + 2] as u16;
+    let second_byte = mem_map[state.prog_counter + 1];
+    let third_byte = mem_map[state.prog_counter + 2];
 
     // Need to be usize since it's used as an array index
-    let address = (third_byte << 8 | second_byte) as usize;
+    let address = ((third_byte as u16) << 8 | (second_byte as u16));
     state.prog_counter = address;
 }
 
@@ -1262,7 +1266,7 @@ fn opcode_mvi(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     // 0 | 0 | 1 | 1 | 0 | 1 | 1 | 0
     // ^^^ move to memory immediate
 
-    let dest = (mem_map[state.prog_counter] & 0b00_111_000) >> 3;
+    let dest = (mem_map[state.prog_counter as u16] & 0b00_111_000) >> 3;
     let second_byte = mem_map[state.prog_counter + 1];
     state.prog_counter += 2;
     match dest {
@@ -1297,7 +1301,7 @@ fn opcode_mvi(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
         // memory
         0b110 => {
             // Get address from reg pair H-L
-            let address = (((state.reg_h as u16) << 8) | state.reg_l as u16) as usize;
+            let address = (((state.reg_h as u16) << 8) | state.reg_l as u16);
             mem_map[address] = second_byte;
         }
         _ => {
@@ -1377,7 +1381,7 @@ mod tests {
         test_rom[2] = (test_address >> 8) as u8;
         si_mem.rom = test_rom;
         iterate_processor_state(&mut test_state, &mut si_mem);
-        assert_eq!(test_address as usize, test_state.prog_counter);
+        assert_eq!(test_address, test_state.prog_counter);
     }
 
     #[test]
@@ -1558,7 +1562,10 @@ mod tests {
         test_state.reg_l = ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) & 0x00ff) as u8;
         si_mem.rom = test_rom;
         let address = iterate_processor_state(&mut test_state, &mut si_mem);
-        assert_eq!(si_mem[space_invaders_rom::SPACE_INVADERS_ROM.len()], 0xff);
+        assert_eq!(
+            si_mem[space_invaders_rom::SPACE_INVADERS_ROM.len() as u16],
+            0xff
+        );
     }
 
     #[test]
@@ -1576,4 +1583,3 @@ mod tests {
         assert_eq!(test_state.prog_counter, 2);
     }
 }
-     
