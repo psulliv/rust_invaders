@@ -109,30 +109,37 @@ mod machine;
 mod space_invaders_rom;
 
 use eighty_eighty_emulator::ProcessorState;
-use std::sync::mpsc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::console;
+use std::rc::Rc;
+use std::sync::Mutex;
 
-fn key_action_handler(event: web_sys::KeyboardEvent, channel:&mpsc::Sender<(String, bool)>) {
-    let is_down = event.type_().eq("keydown");
-    let greeting = "keypress detected:";
-    console::log_1(&greeting.into());
-    console::log_1(&event.key().into());
-    console::log_1(&is_down.into());
-    let message: (String, bool) = (event.key(), is_down);
-    // explodes here
-    console::log_1(&channel.send(message).err().unwrap().to_string().into());
+
+// BonusLife, CoinInfo, NumLivesSwitch0 & 1, and Tilt not mapped to keyboard input.
+fn map_keyboard_to_button(key: &str) -> Option<machine::Button> {
+    match key {
+        "KeyA" => Some(machine::Button::P1Left),
+        "KeyD" => Some(machine::Button::P1Right),
+        "ArrowLeft" => Some(machine::Button::P2Left),
+        "ArrowRight" => Some(machine::Button::P2Right),
+        "Enter" => Some(machine::Button::P1Shoot),
+        "Space" => Some(machine::Button::P2Shoot),
+        "Digit1" => Some(machine::Button::P1Start),
+        "Digit2" => Some(machine::Button::P2Start),
+        "KeyC" => Some(machine::Button::Coin),
+        _ => None
+    }
 }
 
-fn start_keyboard_listeners(
-    key_up_tx: mpsc::Sender<(String, bool)>,
-    key_down_tx: mpsc::Sender<(String, bool)>,
-) {
+fn start_keyboard_listeners(m: Rc<Mutex<(String, bool)>>) {
     let window = web_sys::window().expect("no global `window` exists");
 
+    let down_m = m.clone();
     let keydown_closure = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| {
-        key_action_handler(event, &key_down_tx)
+        let is_down = event.type_().eq("keydown");
+        let mut button_state = down_m.lock().unwrap();
+        *button_state = (event.code(), is_down);
     }) as Box<dyn FnMut(_)>);
     window
         .add_event_listener_with_callback("keydown", keydown_closure.as_ref().unchecked_ref())
@@ -140,7 +147,10 @@ fn start_keyboard_listeners(
     keydown_closure.forget();
 
     let keyup_closure = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| {
-        key_action_handler(event, &key_up_tx)
+        let is_down = !event.type_().eq("keyup");
+        let mut button_state = m.lock().unwrap();
+        // Update button state
+        *button_state = (event.code(), is_down);
     }) as Box<dyn FnMut(_)>);
     window
         .add_event_listener_with_callback("keyup", keyup_closure.as_ref().unchecked_ref())
@@ -160,15 +170,9 @@ pub fn start() {
     #[cfg(feature = "console_error_panic_hook")]
     console_error_panic_hook::set_once();
 
-    let (key_up_tx, rx): (mpsc::Sender<(String, bool)>, mpsc::Receiver<(String, bool)>) =
-        mpsc::channel();
-    let key_down_tx = key_up_tx.clone();
-    start_keyboard_listeners(key_up_tx, key_down_tx);
-    if let Ok(msg) = rx.try_recv() {
-        /*Todo: Use the contents of msg to update machine state,
-        Move this block into emulation loop. */
-        console::log_1(&msg.0.into());
-    }
+    let keyboard_input = ("".to_string(), false);
+    let m = Rc::new(Mutex::new(keyboard_input));
+    start_keyboard_listeners(m.clone());
 
     //let this_processor = ProcessorState::new();
     //emulation_loop(this_processor, &space_invaders_rom::SPACE_INVADERS_ROM);
