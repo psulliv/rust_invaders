@@ -3,7 +3,10 @@
 #![allow(unused)]
 
 use bitflags::bitflags;
-use std::ops::{Index, IndexMut};
+use std::{
+    fmt::Debug,
+    ops::{Index, IndexMut},
+};
 
 use crate::space_invaders_rom;
 
@@ -867,8 +870,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             opcode_jmp(state, mem_map);
         }
         0xc4 => {
-            panic!(" 	CNZ adr	3		if NZ, CALL adr");
-            // 3
+            opcode_call(state, mem_map);
         }
         0xc5 => {
             panic!(" 	PUSH B	1		(sp-2)<-C; (sp-1)<-B; sp <- sp - 2");
@@ -899,12 +901,10 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0xcc => {
-            panic!(" 	CZ adr	3		if Z, CALL adr");
-            // 3
+            opcode_call(state, mem_map);
         }
         0xcd => {
-            panic!(" 	CALL adr	3		(SP-1)<-PC.hi;(SP-2)<-PC.lo;SP<-SP-2;PC=adr");
-            // 3
+            opcode_call(state, mem_map);
         }
         0xce => {
             panic!(" 	ACI D8	2	Z, S, P, CY, AC	A <- A + data + CY");
@@ -931,8 +931,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 2
         }
         0xd4 => {
-            panic!(" 	CNC adr	3		if NCY, CALL adr");
-            // 3
+            opcode_call(state, mem_map);
         }
         0xd5 => {
             panic!(" 	PUSH D	1		(sp-2)<-E; (sp-1)<-D; sp <- sp - 2");
@@ -963,8 +962,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 2
         }
         0xdc => {
-            panic!(" 	CC adr	3		if CY, CALL adr");
-            // 3
+            opcode_call(state, mem_map);
         }
         0xdd => {
             panic!(" 	-			");
@@ -995,8 +993,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0xe4 => {
-            panic!(" 	CPO adr	3		if PO, CALL adr");
-            // 3
+            opcode_call(state, mem_map);
         }
         0xe5 => {
             panic!(" 	PUSH H	1		(sp-2)<-L; (sp-1)<-H; sp <- sp - 2");
@@ -1027,8 +1024,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0xec => {
-            panic!(" 	CPE adr	3		if PE, CALL adr");
-            // 3
+            opcode_call(state, mem_map);
         }
         0xed => {
             panic!(" 	-			");
@@ -1091,8 +1087,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0xfc => {
-            panic!(" 	CM adr	3		if M, CALL adr");
-            // 3
+            opcode_call(state, mem_map);
         }
         0xfd => {
             panic!(" 	-			");
@@ -1125,10 +1120,39 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
 /// specified in byte 3 and byte 2 of the current
 /// instruction.
 fn opcode_call(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
-    // 1 | 1 | 0 | 0 | 1 | 1 | 0 | 1
-    mem_map[state.stack_pointer - 1] = ((state.prog_counter as u16) >> 8) as u8;
-    // I should really look into the Rust std lib to figure out what the proper way to cut up bits is
-    mem_map[state.stack_pointer - 2] = ((state.prog_counter as u16) & 0b0000_0000_1111_1111) as u8;
+    // Unconditional 1 | 1 | 0 | 0 | 1 | 1 | 0 | 1
+    // Conditional 1 | 1 | C | C | C | 1 | 0 | 0
+    // NZ (not zero) 000
+    // Z (zero) 001 [awkward that these bits are switched huh]
+    // NC (no carry) 010
+    // C (carry) 011
+    // PO (odd parity, bit not set) 100
+    // PE (even parity, bit set) 101
+    // P (sign bit not set) 110
+    // M (sign bit set) 111
+    let cur_instruction = mem_map[state.prog_counter + 1];
+    let second_byte = mem_map[state.prog_counter + 1];
+    let third_byte = mem_map[state.prog_counter + 2];
+    let condition = (cur_instruction & 0b00_111_000) >> 3;
+    if (cur_instruction == 0b1100_1101)
+        || ((condition == 0b000) && !(state.flags.contains(ConditionFlags::Z)))
+        || ((condition == 0b001) && (state.flags.contains(ConditionFlags::Z)))
+        || ((condition == 0b010) && !(state.flags.contains(ConditionFlags::CY)))
+        || ((condition == 0b011) && (state.flags.contains(ConditionFlags::CY)))
+        || ((condition == 0b100) && !(state.flags.contains(ConditionFlags::P)))
+        || ((condition == 0b101) && (state.flags.contains(ConditionFlags::P)))
+        || ((condition == 0b110) && !(state.flags.contains(ConditionFlags::S)))
+        || ((condition == 0b111) && (state.flags.contains(ConditionFlags::S)))
+    {
+        mem_map[state.stack_pointer - 1] = ((state.prog_counter) >> 8) as u8;
+        // I should really look into the Rust std lib to figure out what the proper way to cut up bits is
+        // truncating may just work without the mask.
+        mem_map[state.stack_pointer - 2] = ((state.prog_counter) & 0b0000_0000_1111_1111) as u8;
+        state.stack_pointer = state.stack_pointer - 2;
+        state.prog_counter = ((third_byte as u16) << 8) | (second_byte as u16);
+    } else {
+        state.prog_counter += 3;
+    }
 }
 
 /// NOP (No op)
@@ -1581,5 +1605,22 @@ mod tests {
         si_mem.rom = test_rom;
         let address = iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.prog_counter, 2);
+    }
+
+    #[test]
+    fn call_uncon() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // 0b1100_1101 is unconditional call
+        test_rom[0] = 0b1100_1101;
+        let some_rando_address = 0x0020;
+        let second_byte = (some_rando_address & 0x00ff) as u8;
+        let third_byte = ((some_rando_address & 0xff00) >> 8) as u8;
+        test_rom[1] = second_byte;
+        test_rom[2] = third_byte;
+        si_mem.rom = test_rom;
+        let address = iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.prog_counter, 0x0020);
     }
 }
