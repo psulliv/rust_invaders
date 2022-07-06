@@ -1885,4 +1885,36 @@ mod tests {
         assert_eq!(test_state.prog_counter, 0x0020);
         assert_eq!(test_state.stack_pointer, orig_stack_add - 2);
     }
+
+    #[test]
+    fn ldax_bc() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // register pair b-c is 00
+        test_rom[0] = 0b00_00_1010;
+        let some_rando_address = 0x0020;
+        test_rom[some_rando_address] = 0xff;
+        test_state.reg_b = (some_rando_address >> 8) as u8;
+        test_state.reg_c = some_rando_address as u8;
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0xff);
+    }
+
+    #[test]
+    fn ldax_de() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // register pair d-e is 01
+        test_rom[0] = 0b00_01_1010;
+        let some_rando_address = 0x0020;
+        test_rom[some_rando_address] = 0xff;
+        test_state.reg_d = (some_rando_address >> 8) as u8;
+        test_state.reg_e = some_rando_address as u8;
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0xff);
+    }
 }
