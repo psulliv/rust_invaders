@@ -114,13 +114,15 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::console;
 
-fn key_action_handler(
-    event: web_sys::KeyboardEvent,
-    channel: &mpsc::Sender<(String, bool)>,
-) {
+fn key_action_handler(event: web_sys::KeyboardEvent, channel:&mpsc::Sender<(String, bool)>) {
     let is_down = event.type_().eq("keydown");
-    let message = (event.key(), is_down);
-    channel.send(message).unwrap();
+    let greeting = "keypress detected:";
+    console::log_1(&greeting.into());
+    console::log_1(&event.key().into());
+    console::log_1(&is_down.into());
+    let message: (String, bool) = (event.key(), is_down);
+    // explodes here
+    console::log_1(&channel.send(message).err().unwrap().to_string().into());
 }
 
 fn start_keyboard_listeners(
@@ -168,6 +170,6 @@ pub fn start() {
         console::log_1(&msg.0.into());
     }
 
-    let this_processor = ProcessorState::new();
-    emulation_loop(this_processor, &space_invaders_rom::SPACE_INVADERS_ROM);
+    //let this_processor = ProcessorState::new();
+    //emulation_loop(this_processor, &space_invaders_rom::SPACE_INVADERS_ROM);
 }
