@@ -3,6 +3,9 @@
 #![allow(unused)]
 
 use bitflags::bitflags;
+use std::ops::{Index, IndexMut};
+
+use crate::space_invaders_rom;
 
 bitflags! {
     struct ConditionFlags: u8 {
@@ -25,7 +28,6 @@ pub struct ProcessorState {
     reg_l: u8,
     stack_pointer: u16,
     prog_counter: usize,
-    memory: Vec<u8>,
     flags: ConditionFlags,
 }
 
@@ -39,9 +41,8 @@ impl ProcessorState {
             reg_e: 0,
             reg_h: 0,
             reg_l: 0,
-            stack_pointer: 0,
+            stack_pointer: 0x23ff,
             prog_counter: 0,
-            memory: vec![0; 4096],
             flags: ConditionFlags {
                 bits: (0b0000_0000),
             },
@@ -49,7 +50,46 @@ impl ProcessorState {
     }
 }
 
-pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &[u8; 8192]) {
+pub struct SpaceInvadersMemMap {
+    rom: [u8; space_invaders_rom::SPACE_INVADERS_ROM.len()],
+    rw_mem: Vec<u8>,
+}
+
+impl SpaceInvadersMemMap {
+    pub fn new() -> Self {
+        SpaceInvadersMemMap {
+            rom: space_invaders_rom::SPACE_INVADERS_ROM,
+            rw_mem: vec![0; 4096],
+        }
+    }
+}
+
+impl Index<usize> for SpaceInvadersMemMap {
+    type Output = u8;
+    fn index(&self, idx: usize) -> &Self::Output {
+        if idx < space_invaders_rom::SPACE_INVADERS_ROM.len() {
+            return &self.rom[idx];
+        } else {
+            return &self.rw_mem[idx - space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        }
+    }
+}
+
+impl IndexMut<usize> for SpaceInvadersMemMap {
+    fn index_mut(&mut self, idx: usize) -> &mut Self::Output {
+        if idx < space_invaders_rom::SPACE_INVADERS_ROM.len() {
+            if cfg!(test) {
+                return &mut self.rom[idx];
+            } else {
+                panic!("Attempted to mutate ROM");
+            }
+        } else {
+            return &mut self.rw_mem[idx - space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        }
+    }
+}
+
+pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     // get the next opcode at the current program counter
     let cur_instruction = mem_map[state.prog_counter];
     match cur_instruction {
@@ -76,8 +116,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &[u8; 8192])
             // 1
         }
         0x06 => {
-            panic!(" 	MVI B, D8	2		B <- byte 2");
-            // 2
+            opcode_mvi(state, mem_map);
         }
         0x07 => {
             panic!(" 	RLC	1	CY	A = A << 1; bit 0 = prev bit 7; CY = prev bit 7");
@@ -108,8 +147,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &[u8; 8192])
             // 1
         }
         0x0e => {
-            panic!(" 	MVI C,D8	2		C <- byte 2");
-            // 2
+            opcode_mvi(state, mem_map);
         }
         0x0f => {
             panic!(" 	RRC	1	CY	A = A >> 1; bit 7 = prev bit 0; CY = prev bit 0");
@@ -139,8 +177,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &[u8; 8192])
             // 1
         }
         0x16 => {
-            panic!(" 	MVI D, D8	2		D <- byte 2");
-            // 2
+            opcode_mvi(state, mem_map);
         }
         0x17 => {
             panic!(" 	RAL	1	CY	A = A << 1; bit 0 = prev CY; CY = prev bit 7");
@@ -171,8 +208,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &[u8; 8192])
             // 1
         }
         0x1e => {
-            panic!(" 	MVI E,D8	2		E <- byte 2");
-            // 2
+            opcode_mvi(state, mem_map);
         }
         0x1f => {
             panic!(" 	RAR	1	CY	A = A >> 1; bit 7 = prev bit 7; CY = prev bit 0");
@@ -202,8 +238,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &[u8; 8192])
             // 1
         }
         0x26 => {
-            panic!(" 	MVI H,D8	2		H <- byte 2");
-            // 1
+            opcode_mvi(state, mem_map);
         }
         0x27 => {
             panic!(" 	DAA	1		special");
@@ -234,8 +269,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &[u8; 8192])
             // 1
         }
         0x2e => {
-            panic!(" 	MVI L, D8	2		L <- byte 2");
-            // 2
+            opcode_mvi(state, mem_map);
         }
         0x2f => {
             panic!(" 	CMA	1		A <- !A");
@@ -266,8 +300,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &[u8; 8192])
             // 1
         }
         0x36 => {
-            panic!(" 	MVI M,D8	2		(HL) <- byte 2");
-            // 2
+            opcode_mvi(state, mem_map);
         }
         0x37 => {
             panic!(" 	STC	1	CY	CY = 1");
@@ -298,8 +331,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &[u8; 8192])
             // 1
         }
         0x3e => {
-            panic!(" 	MVI A,D8	2		A <- byte 2");
-            // 2
+            opcode_mvi(state, mem_map);
         }
         0x3f => {
             panic!(" 	CMC	1	CY	CY=!CY");
@@ -1075,6 +1107,26 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &[u8; 8192])
     };
 }
 
+/// CALL
+/// addr (Call)
+/// ((SP) - 1) ~ (PCH)
+/// ((SP) - 2) ~ (PCl)
+/// (SP) ~ (SP) - 2
+/// (PC) ~ (byte 3) (byte 2)
+/// The high-order eight bits of the next instruction ad-
+/// dress are moved to the memory location whose
+/// address is one less than the content of register SP.
+/// The low-order eight bits of the next instruction ad-
+/// dress are moved to the memory location whose
+/// address is two less than the content of register SP.
+/// The content of register SP is decremented by 2. Con-
+/// trol is transferred to the instruction whose address is
+/// specified in byte 3 and byte 2 of the current
+/// instruction.
+fn opcode_call(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
+    // 1 | 1 | 0 | 0 | 1 | 1 | 0 | 1
+}
+
 /// NOP (No op)
 /// No operation is performed. The registers and flags
 /// are unaffected.
@@ -1088,7 +1140,7 @@ fn opcode_nop(state: &mut ProcessorState) {
 /// Control is transferred to the instruction whose ad-
 /// dress is specified in byte 3 and byte 2 of the current
 /// instruction.
-fn opcode_jmp(state: &mut ProcessorState, mem_map: &[u8; 8192]) {
+fn opcode_jmp(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     // get the address to jump to, needs to be u16 since we shift 8 bits
     let second_byte = mem_map[state.prog_counter + 1] as u16;
     let third_byte = mem_map[state.prog_counter + 2] as u16;
@@ -1105,7 +1157,7 @@ fn opcode_jmp(state: &mut ProcessorState, mem_map: &[u8; 8192]) {
 /// register (rh) of the register pair rp. Byte 2 of the in-
 /// struction is moved into the low-order register (rl) of
 /// the register pair rp.
-fn opcode_lxi(state: &mut ProcessorState, mem_map: &[u8; 8192]) {
+fn opcode_lxi(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     // panic!(" 	LXI SP, D16	3		SP.hi <- byte 3, SP.lo <- byte 2");
 
     // This handles several register pairs so we will match against it's opcode
@@ -1151,16 +1203,19 @@ fn opcode_lxi(state: &mut ProcessorState, mem_map: &[u8; 8192]) {
 /// ((H)(L))~ (r)
 /// The content of register r is moved to the memory lo-
 /// cation whose address is in registers Hand L.
-fn opcode_mov(state: &mut ProcessorState, mem_map: &[u8; 8192]) {
+fn opcode_mov(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
+    // Todo: Work in progress!
+    panic!("Not implemented yet!");
     // 0 | 1 | D | D | D | 1 | 1 | 0
     // or
     // 0 | 1 | 1 | 1 | 0 | S | S | S
 
     // test to see if this is a move to or from memory
+
     let cur_instruction = mem_map[state.prog_counter];
-    let dest = cur_instruction & 0b00_111_000;
+    let dest = (cur_instruction & 0b00_111_000) >> 3;
     let src = cur_instruction & 0b00_000_111;
-    if dest == 0b00_110_000 {
+    if dest == 0b110 {
         // then this is a 0 | 1 | 1 | 1 | 0 | S | S | S
         // format opcode and moving from `src` to memory
         // in pair H-L
@@ -1181,12 +1236,73 @@ fn opcode_mov(state: &mut ProcessorState, mem_map: &[u8; 8192]) {
             0b100 => {}
             // L
             0b101 => {}
+            _ => {}
         }
-    } else if src == 0b_00_000_110 {
+    } else if src == 0b110 {
         // then this is a 0 | 1 | D | D | D | 1 | 1 | 0
         // format opcode, use dest
     } else {
         panic!("opcode_mov missing proper source or destination register format");
+    }
+}
+
+/// MVI r, data (Move Immediate)
+/// (r) ~ (byte 2)
+/// The content of byte 2 of the instruction is moved to
+/// register r.
+/// MVI M, data (Move to memory immediate)
+/// ((H) (L)) ~ (byte 2)
+/// The content of byte 2 of the instruction is moved to
+/// the memory location whose address is in registers H
+/// and L.
+fn opcode_mvi(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
+    // 0 | 0 | D | D | D | 1 | 1 | 0
+    // ^^^ move to register immediate
+    // or
+    // 0 | 0 | 1 | 1 | 0 | 1 | 1 | 0
+    // ^^^ move to memory immediate
+
+    let dest = (mem_map[state.prog_counter] & 0b00_111_000) >> 3;
+    let second_byte = mem_map[state.prog_counter + 1];
+    state.prog_counter += 2;
+    match dest {
+        // A
+        0b111 => {
+            state.reg_a = second_byte;
+        }
+        // B
+        0b000 => {
+            state.reg_b = second_byte;
+        }
+        // C
+        0b001 => {
+            state.reg_c = second_byte;
+        }
+        // D
+        0b010 => {
+            state.reg_d = second_byte;
+        }
+        // E
+        0b011 => {
+            state.reg_e = second_byte;
+        }
+        // H
+        0b100 => {
+            state.reg_h = second_byte;
+        }
+        // L
+        0b101 => {
+            state.reg_l = second_byte;
+        }
+        // memory
+        0b110 => {
+            // Get address from reg pair H-L
+            let address = (((state.reg_h as u16) << 8) | state.reg_l as u16) as usize;
+            mem_map[address] = second_byte;
+        }
+        _ => {
+            panic!("invalid register bits in opcode_mvi");
+        }
     }
 }
 
@@ -1218,6 +1334,15 @@ fn opcode_mov(state: &mut ProcessorState, mem_map: &[u8; 8192]) {
 // should remove their instructions from the match arms and include a catch all
 // instruction that panics
 
+// Todo: figure out a way to make certain pieces of the test setup common like python's
+// <TestCase>.setUp().
+
+// Todo: Make the variable names, the tests, and the memory portion generic over
+// potential other 8080 emulation uses. When the IO ports come around as something
+// to implement come up with some sort of API to access those. This may be impossible
+// since we couldn't really take a ROM input given our platform of web assembly but
+// can certainly be a stretch goal.
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1227,14 +1352,17 @@ mod tests {
     fn basic_nop_step() {
         let mut test_state = ProcessorState::new();
         let cur_instruction_address = test_state.prog_counter;
-        let test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
-        iterate_processor_state(&mut test_state, &test_rom);
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let test_rom = [0; 8192];
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.prog_counter, cur_instruction_address + 1);
     }
 
     #[test]
     fn basic_jmp_step() {
         let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
         // insert the jmp instruction
         test_rom[0] = 0xc3;
@@ -1247,19 +1375,22 @@ mod tests {
         // the high order bits and casting as u8
         test_rom[1] = (test_address & 0b0000_0000_1111_1111) as u8;
         test_rom[2] = (test_address >> 8) as u8;
-        iterate_processor_state(&mut test_state, &test_rom);
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_address as usize, test_state.prog_counter);
     }
 
     #[test]
     fn lxi_step_bc() {
         let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
         // register pair b-c is 00
         test_rom[0] = (0b00 << 4) | 0b0000_0001;
         test_rom[1] = 0xff;
         test_rom[2] = 0xff;
-        iterate_processor_state(&mut test_state, &test_rom);
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.reg_b, test_rom[2]);
         assert_eq!(test_state.reg_c, test_rom[1]);
     }
@@ -1267,24 +1398,28 @@ mod tests {
     #[test]
     fn lxi_step_de() {
         let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
         // register pair d-e is 01
         test_rom[0] = (0b01 << 4) | 0b0000_0001;
         test_rom[1] = 0xff;
         test_rom[2] = 0xff;
-        iterate_processor_state(&mut test_state, &test_rom);
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.reg_d, test_rom[2]);
         assert_eq!(test_state.reg_e, test_rom[1]);
     }
     #[test]
     fn lxi_step_hl() {
         let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
         // register pair h-l is 10
         test_rom[0] = (0b10 << 4) | 0b0000_0001;
         test_rom[1] = 0xff;
         test_rom[2] = 0xff;
-        iterate_processor_state(&mut test_state, &test_rom);
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.reg_h, test_rom[2]);
         assert_eq!(test_state.reg_l, test_rom[1]);
     }
@@ -1292,12 +1427,14 @@ mod tests {
     #[test]
     fn lxi_step_sp() {
         let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
         // register sp is 11
         test_rom[0] = (0b11 << 4) | 0b0000_0001;
         test_rom[1] = 0xff;
         test_rom[2] = 0xff;
-        iterate_processor_state(&mut test_state, &test_rom);
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(
             test_state.stack_pointer,
             ((test_rom[2] as u16) << 8) | (test_rom[1] as u16)
@@ -1307,12 +1444,136 @@ mod tests {
     #[test]
     fn lxi_step_good_pc() {
         let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
         // register sp is 11
         test_rom[0] = (0b11 << 4) | 0b0000_0001;
         test_rom[1] = 0xff;
         test_rom[2] = 0xff;
-        iterate_processor_state(&mut test_state, &test_rom);
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.prog_counter, 3);
     }
+
+    #[test]
+    fn mvi_step_reg_a() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // 111 is a
+        test_rom[0] = 0b00_000_110 | (0b111 << 3);
+        test_rom[1] = 0xff;
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0xff);
+    }
+
+    #[test]
+    fn mvi_step_reg_b() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // 000 is b
+        test_rom[0] = 0b00_000_110 | (0b000 << 3);
+        test_rom[1] = 0xff;
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_b, 0xff);
+    }
+
+    #[test]
+    fn mvi_step_reg_c() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // 001 is c
+        test_rom[0] = 0b00_000_110 | (0b001 << 3);
+        test_rom[1] = 0xff;
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_c, 0xff);
+    }
+
+    #[test]
+    fn mvi_step_reg_d() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // 010 is d
+        test_rom[0] = 0b00_000_110 | (0b010 << 3);
+        test_rom[1] = 0xff;
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_d, 0xff);
+    }
+
+    #[test]
+    fn mvi_step_reg_e() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // 011 is e
+        test_rom[0] = 0b00_000_110 | (0b011 << 3);
+        test_rom[1] = 0xff;
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_e, 0xff);
+    }
+
+    #[test]
+    fn mvi_step_reg_h() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // 100 is h
+        test_rom[0] = 0b00_000_110 | (0b100 << 3);
+        test_rom[1] = 0xff;
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_h, 0xff);
+    }
+
+    #[test]
+    fn mvi_step_reg_l() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // 010 is l
+        test_rom[0] = 0b00_000_110 | (0b101 << 3);
+        test_rom[1] = 0xff;
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_l, 0xff);
+    }
+
+    #[test]
+    fn mvi_step_mem() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // 110 is memory
+        test_rom[0] = 0b00_000_110 | (0b110 << 3);
+        test_rom[1] = 0xff;
+        test_state.reg_h = ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) >> 8) as u8;
+        test_state.reg_l = ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) & 0x00ff) as u8;
+        si_mem.rom = test_rom;
+        let address = iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(si_mem[space_invaders_rom::SPACE_INVADERS_ROM.len()], 0xff);
+    }
+
+    #[test]
+    fn mvi_step_good_pc() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // 110 is memory
+        test_rom[0] = 0b00_000_110 | (0b110 << 3);
+        test_rom[1] = 0xff;
+        test_state.reg_h = ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) >> 8) as u8;
+        test_state.reg_l = ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) & 0x00ff) as u8;
+        si_mem.rom = test_rom;
+        let address = iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.prog_counter, 2);
+    }
 }
+     
