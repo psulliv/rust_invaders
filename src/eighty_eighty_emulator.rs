@@ -51,6 +51,47 @@ impl ProcessorState {
             },
         }
     }
+
+    /// This uses the register pair bits from the opcode to
+    /// load an address into a register pair
+    /// 00 B-C
+    /// 01 D-E
+    /// 10 H-L
+    /// 11 SP (not really a pair)
+    pub fn set_rp(&mut self, data: u16, pair: u8) {
+        match pair {
+            0b00 => {
+                self.reg_b = (data >> 8) as u8;
+                self.reg_c = data as u8;
+            }
+            0b01 => {
+                self.reg_d = (data >> 8) as u8;
+                self.reg_e = data as u8;
+            }
+            0b10 => {
+                self.reg_h = (data >> 8) as u8;
+                self.reg_l = data as u8;
+            }
+            0b11 => {
+                self.stack_pointer = data;
+            }
+            _ => {
+                panic!("incorrect register pair bits sent to ProcessorState.set_rp()")
+            }
+        }
+    }
+
+    pub fn get_rp(&mut self, pair: u8) -> u16 {
+        match pair {
+            0b00 => (self.reg_b as u16) << 8 | (self.reg_c as u16),
+            0b01 => (self.reg_d as u16) << 8 | (self.reg_e as u16),
+            0b10 => (self.reg_h as u16) << 8 | (self.reg_l as u16),
+            0b11 => self.stack_pointer,
+            _ => {
+                panic!("incorrect register pair bits sent to ProcessorState.get_rp()")
+            }
+        }
+    }
 }
 
 pub struct SpaceInvadersMemMap {
@@ -1275,14 +1316,12 @@ fn opcode_lxi(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
 /// MOV r, M (Move from memory)
 /// (r) ~ ((H) (L))
 /// The content of the memory location, whose address
-/// is in registers Hand L, is moved to register r.
+/// is in registers H and L, is moved to register r.
 /// MOV M, r (Move to memory)
 /// ((H)(L))~ (r)
 /// The content of register r is moved to the memory lo-
 /// cation whose address is in registers Hand L.
 fn opcode_mov(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
-    // Todo: Work in progress!
-    panic!("Not implemented yet!");
     // 0 | 1 | D | D | D | 1 | 1 | 0
     // or
     // 0 | 1 | 1 | 1 | 0 | S | S | S
@@ -1296,11 +1335,11 @@ fn opcode_mov(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
         // then this is a 0 | 1 | 1 | 1 | 0 | S | S | S
         // format opcode and moving from `src` to memory
         // in pair H-L
-
-        // Todo: figure out a way to make this readable
         match src {
             // A
-            0b111 => {}
+            0b111 => {
+                let address = state.reg_h as u16;
+            }
             // B
             0b000 => {}
             // C
@@ -1318,6 +1357,23 @@ fn opcode_mov(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     } else if src == 0b110 {
         // then this is a 0 | 1 | D | D | D | 1 | 1 | 0
         // format opcode, use dest
+        match dest {
+            // A
+            0b111 => {}
+            // B
+            0b000 => {}
+            // C
+            0b001 => {}
+            // D
+            0b010 => {}
+            // E
+            0b011 => {}
+            // H
+            0b100 => {}
+            // L
+            0b101 => {}
+            _ => {}
+        }
     } else {
         panic!("opcode_mov missing proper source or destination register format");
     }
@@ -1407,7 +1463,7 @@ fn opcode_mvi(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
 // Todo: After implementing the operations necessary for space invaders to play
 // (or all of them) remove the braces in the match arms so that the return from
 // the opcode_<instruction> function goes straight to the match arm. Also, if we
-// don't implement certain instructions (aren't needed for to play the game) we
+// don't implement certain instructions (aren't needed to play the game) we
 // should remove their instructions from the match arms and include a catch all
 // instruction that panics
 
@@ -1419,6 +1475,8 @@ fn opcode_mvi(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
 // to implement come up with some sort of API to access those. This may be impossible
 // since we couldn't really take a ROM input given our platform of web assembly but
 // can certainly be a stretch goal.
+
+// Todo: methods for stack get/set
 
 #[cfg(test)]
 mod tests {
@@ -1916,5 +1974,37 @@ mod tests {
         si_mem.rom = test_rom;
         iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.reg_a, 0xff);
+    }
+
+    #[test]
+    fn verify_getset_rp_bc() {
+        let mut test_state = ProcessorState::new();
+        let some_address: u16 = 0xfffe;
+        test_state.set_rp(some_address, 0b00);
+        assert_eq!(test_state.get_rp(0b00), some_address);
+    }
+
+    #[test]
+    fn verify_getset_rp_de() {
+        let mut test_state = ProcessorState::new();
+        let some_address: u16 = 0xfffe;
+        test_state.set_rp(some_address, 0b01);
+        assert_eq!(test_state.get_rp(0b01), some_address);
+    }
+
+    #[test]
+    fn verify_getset_rp_hl() {
+        let mut test_state = ProcessorState::new();
+        let some_address: u16 = 0xfffe;
+        test_state.set_rp(some_address, 0b10);
+        assert_eq!(test_state.get_rp(0b10), some_address);
+    }
+
+    #[test]
+    fn verify_getset_rp_sp() {
+        let mut test_state = ProcessorState::new();
+        let some_address: u16 = 0xfffe;
+        test_state.set_rp(some_address, 0b11);
+        assert_eq!(test_state.get_rp(0b11), some_address);
     }
 }
