@@ -3,6 +3,7 @@
 #![allow(unused)]
 
 use bitflags::bitflags;
+use std::convert::From;
 use std::{
     fmt::Debug,
     ops::{Index, IndexMut},
@@ -58,21 +59,21 @@ impl ProcessorState {
     /// 01 D-E
     /// 10 H-L
     /// 11 SP (not really a pair)
-    pub fn set_rp(&mut self, data: u16, pair: u8) {
+    pub fn set_rp(&mut self, data: u16, pair: RPairBitPattern) {
         match pair {
-            0b00 => {
+            RPairBitPattern::BC => {
                 self.reg_b = (data >> 8) as u8;
                 self.reg_c = data as u8;
             }
-            0b01 => {
+            RPairBitPattern::DE => {
                 self.reg_d = (data >> 8) as u8;
                 self.reg_e = data as u8;
             }
-            0b10 => {
+            RPairBitPattern::HL => {
                 self.reg_h = (data >> 8) as u8;
                 self.reg_l = data as u8;
             }
-            0b11 => {
+            RPairBitPattern::SP => {
                 self.stack_pointer = data;
             }
             _ => {
@@ -81,12 +82,13 @@ impl ProcessorState {
         }
     }
 
-    pub fn get_rp(&mut self, pair: u8) -> u16 {
+    /// gets the contents of the rp as a u16, probably for use as an address
+    pub fn get_rp(&mut self, pair: RPairBitPattern) -> u16 {
         match pair {
-            0b00 => (self.reg_b as u16) << 8 | (self.reg_c as u16),
-            0b01 => (self.reg_d as u16) << 8 | (self.reg_e as u16),
-            0b10 => (self.reg_h as u16) << 8 | (self.reg_l as u16),
-            0b11 => self.stack_pointer,
+            RPairBitPattern::BC => two_le_eights_to_one_sixteen(self.reg_c, self.reg_b),
+            RPairBitPattern::DE => two_le_eights_to_one_sixteen(self.reg_e, self.reg_d),
+            RPairBitPattern::HL => two_le_eights_to_one_sixteen(self.reg_l, self.reg_h),
+            RPairBitPattern::SP => self.stack_pointer,
             _ => {
                 panic!("incorrect register pair bits sent to ProcessorState.get_rp()")
             }
@@ -104,8 +106,8 @@ impl ProcessorState {
 
     // Pops an address from the stack
     pub fn pop_address(&mut self, mem_map: &mut SpaceInvadersMemMap) -> u16 {
-        let mut address = (mem_map[self.stack_pointer - 1] << 8) as u16;
-        address |= mem_map[self.stack_pointer - 2] as u16;
+        let mut address = (mem_map[self.stack_pointer + 1] as u16) << 8;
+        address |= mem_map[self.stack_pointer] as u16;
         self.stack_pointer += 2;
         address
     }
@@ -152,6 +154,86 @@ impl IndexMut<u16> for SpaceInvadersMemMap {
     }
 }
 
+#[derive(PartialEq, Eq)]
+pub enum RPairBitPattern {
+    BC = 0b00,
+    DE = 0b01,
+    HL = 0b10,
+    SP = 0b11,
+}
+
+impl From<u8> for RPairBitPattern {
+    fn from(this_byte: u8) -> Self {
+        match this_byte {
+            0b00 => RPairBitPattern::BC,
+            0b01 => RPairBitPattern::DE,
+            0b10 => RPairBitPattern::HL,
+            0b11 => RPairBitPattern::SP,
+            _ => panic!("Failed to parse u8 to RPairBitPattern"),
+        }
+    }
+}
+
+#[derive(PartialEq, Eq)]
+pub enum RegisterBitPattern {
+    A = 0b111,
+    B = 0b000,
+    C = 0b001,
+    D = 0b010,
+    E = 0b011,
+    H = 0b100,
+    L = 0b101,
+}
+
+impl From<u8> for RegisterBitPattern {
+    fn from(this_byte: u8) -> Self {
+        match this_byte {
+            0b111 => RegisterBitPattern::A,
+            0b000 => RegisterBitPattern::B,
+            0b001 => RegisterBitPattern::C,
+            0b010 => RegisterBitPattern::D,
+            0b011 => RegisterBitPattern::E,
+            0b100 => RegisterBitPattern::H,
+            0b101 => RegisterBitPattern::L,
+            _ => panic!("Failed to parse u8 to RegisterBitPattern"),
+        }
+    }
+}
+
+#[derive(PartialEq, Eq)]
+pub enum ConditionBitPattern {
+    NZ = 0b000,
+    Z = 0b001,
+    NC = 0b010,
+    C = 0b011,
+    PO = 0b100,
+    PE = 0b101,
+    P = 0b110,
+    M = 0b111,
+}
+
+impl From<u8> for ConditionBitPattern {
+    fn from(this_byte: u8) -> Self {
+        match this_byte {
+            0b000 => ConditionBitPattern::NZ,
+            0b001 => ConditionBitPattern::Z,
+            0b010 => ConditionBitPattern::NC,
+            0b011 => ConditionBitPattern::C,
+            0b100 => ConditionBitPattern::PO,
+            0b101 => ConditionBitPattern::PE,
+            0b110 => ConditionBitPattern::P,
+            0b111 => ConditionBitPattern::M,
+            _ => panic!("failed to parse u8 to ConditionBitPattern"),
+        }
+    }
+}
+
+/// Take two u8 in little end order and put them in a single u16
+fn two_le_eights_to_one_sixteen(first_byte: u8, second_byte: u8) -> u16 {
+    (second_byte as u16) << 8 | first_byte as u16
+}
+
+/// match statement for operation decoding
 pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     // get the next opcode at the current program counter
     let cur_instruction = mem_map[state.prog_counter];
@@ -1190,23 +1272,19 @@ fn opcode_call(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     let cur_instruction = mem_map[state.prog_counter];
     let second_byte = mem_map[state.prog_counter + 1];
     let third_byte = mem_map[state.prog_counter + 2];
-    let condition = (cur_instruction & 0b00_111_000) >> 3;
+    let condition: ConditionBitPattern = ((cur_instruction & 0b00_111_000) >> 3).into();
     if (cur_instruction == 0b1100_1101)
-        || ((condition == 0b000) && !(state.flags.contains(ConditionFlags::Z)))
-        || ((condition == 0b001) && (state.flags.contains(ConditionFlags::Z)))
-        || ((condition == 0b010) && !(state.flags.contains(ConditionFlags::CY)))
-        || ((condition == 0b011) && (state.flags.contains(ConditionFlags::CY)))
-        || ((condition == 0b100) && !(state.flags.contains(ConditionFlags::P)))
-        || ((condition == 0b101) && (state.flags.contains(ConditionFlags::P)))
-        || ((condition == 0b110) && !(state.flags.contains(ConditionFlags::S)))
-        || ((condition == 0b111) && (state.flags.contains(ConditionFlags::S)))
+        || ((condition == ConditionBitPattern::NZ) && !(state.flags.contains(ConditionFlags::Z)))
+        || ((condition == ConditionBitPattern::Z) && (state.flags.contains(ConditionFlags::Z)))
+        || ((condition == ConditionBitPattern::NC) && !(state.flags.contains(ConditionFlags::CY)))
+        || ((condition == ConditionBitPattern::C) && (state.flags.contains(ConditionFlags::CY)))
+        || ((condition == ConditionBitPattern::PO) && !(state.flags.contains(ConditionFlags::P)))
+        || ((condition == ConditionBitPattern::PE) && (state.flags.contains(ConditionFlags::P)))
+        || ((condition == ConditionBitPattern::P) && !(state.flags.contains(ConditionFlags::S)))
+        || ((condition == ConditionBitPattern::M) && (state.flags.contains(ConditionFlags::S)))
     {
-        mem_map[state.stack_pointer - 1] = ((state.prog_counter) >> 8) as u8;
-        // I should really look into the Rust std lib to figure out what the proper way to cut up bits is
-        // truncating may just work without the mask.
-        mem_map[state.stack_pointer - 2] = ((state.prog_counter) & 0b0000_0000_1111_1111) as u8;
-        state.stack_pointer = state.stack_pointer - 2;
-        state.prog_counter = ((third_byte as u16) << 8) | (second_byte as u16);
+        state.push_address(mem_map, state.prog_counter);
+        state.prog_counter = two_le_eights_to_one_sixteen(second_byte, third_byte);
     } else {
         state.prog_counter += 3;
     }
@@ -1225,22 +1303,11 @@ fn opcode_nop(state: &mut ProcessorState) {
 /// The content of the register pair rp is incremented by
 /// one. Note: No condition flags are affected
 fn opcode_inx(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
-    let rp_bits = (mem_map[state.prog_counter] & 0b00_11_0000) >> 4;
-    match rp_bits {
-        0b0000_0000 => {
-            // register pair B-C
-            let address = (state.reg_b as u16) << 8 | state.reg_c as u16;
-            state.reg_a = mem_map[address];
-        }
-        0b0000_0001 => {
-            // register pair D-E
-            let address = (state.reg_d as u16) << 8 | state.reg_e as u16;
-            state.reg_a = mem_map[address];
-        }
-        _ => {
-            panic!("unhandled register pair bits in opcode_ldax");
-        }
-    }
+    panic!("In progress!");
+    let rp_bits: RPairBitPattern = ((mem_map[state.prog_counter] & 0b00_11_0000) >> 4).into();
+    let rp_16 = state.get_rp(rp_bits);
+    state.set_rp(rp_16 + 1, rp_bits);
+
     state.prog_counter += 1;
 }
 
@@ -1255,7 +1322,7 @@ fn opcode_jmp(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     let third_byte = mem_map[state.prog_counter + 2];
 
     // Need to be usize since it's used as an array index
-    let address = ((third_byte as u16) << 8 | (second_byte as u16));
+    let address = two_le_eights_to_one_sixteen(second_byte, third_byte);
     state.prog_counter = address;
 }
 
@@ -1447,7 +1514,7 @@ fn opcode_mvi(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
         // memory
         0b110 => {
             // Get address from reg pair H-L
-            let address = (((state.reg_h as u16) << 8) | state.reg_l as u16);
+            let address = state.get_rp(RPairBitPattern::HL);
             mem_map[address] = second_byte;
         }
         _ => {
@@ -1455,21 +1522,6 @@ fn opcode_mvi(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
         }
     }
 }
-
-// DDD or SSS REGISTER NAME
-// 111 A
-// 000 B
-// 001 C
-// 010 D
-// 011 E
-// 100 H
-// 101 L
-
-// Register pair bits
-// 00 B-C
-// 01 D-E
-// 10 H-L
-// 11 SP (not really a pair)
 
 // Todo: remove extra match branches in the iterate state function
 // since most of these opcodes use bits in the instruction to determine
@@ -1485,15 +1537,27 @@ fn opcode_mvi(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
 // instruction that panics
 
 // Todo: figure out a way to make certain pieces of the test setup common like python's
-// <TestCase>.setUp().
+// <TestCase>.setUp(). Avoid making the tests reliant on portions of the code base
+// that they are testing however. IE don't replace the bits added to test ROM code
+// with bits that we are using as enums, if both of those are wrong in the same
+// way it masks a failure.
 
 // Todo: Make the variable names, the tests, and the memory portion generic over
 // potential other 8080 emulation uses. When the IO ports come around as something
 // to implement come up with some sort of API to access those. This may be impossible
 // since we couldn't really take a ROM input given our platform of web assembly but
-// can certainly be a stretch goal.
+// that can certainly be a stretch goal.
 
-// Todo: methods for stack get/set
+// Todo: replace bare binary and hex values with enums that make sense. Probably enums
+// for the register and register pair values at least, maybe so far as consts for the
+// masking bits. replacing the match statement in the iterate_processor_state call
+// may not be possible but it could be reasonable if every piece has a From trait
+// implemented.
+
+// Todo: replace the panics with Err valuse that aggregate into a good error message at a single
+// panic! near the top and handle the errors that can be handled. Most of this shouldn't be
+// able to be handled though since there aren't external deps, disk usage, network
+// usage, additional threads to contend, or even memory usage outside the initial allocations.
 
 #[cfg(test)]
 mod tests {
@@ -1997,32 +2061,32 @@ mod tests {
     fn verify_getset_rp_bc() {
         let mut test_state = ProcessorState::new();
         let some_address: u16 = 0xfffe;
-        test_state.set_rp(some_address, 0b00);
-        assert_eq!(test_state.get_rp(0b00), some_address);
+        test_state.set_rp(some_address, 0b00.into());
+        assert_eq!(test_state.get_rp(0b00.into()), some_address);
     }
 
     #[test]
     fn verify_getset_rp_de() {
         let mut test_state = ProcessorState::new();
         let some_address: u16 = 0xfffe;
-        test_state.set_rp(some_address, 0b01);
-        assert_eq!(test_state.get_rp(0b01), some_address);
+        test_state.set_rp(some_address, 0b01.into());
+        assert_eq!(test_state.get_rp(0b01.into()), some_address);
     }
 
     #[test]
     fn verify_getset_rp_hl() {
         let mut test_state = ProcessorState::new();
         let some_address: u16 = 0xfffe;
-        test_state.set_rp(some_address, 0b10);
-        assert_eq!(test_state.get_rp(0b10), some_address);
+        test_state.set_rp(some_address, 0b10.into());
+        assert_eq!(test_state.get_rp(0b10.into()), some_address);
     }
 
     #[test]
     fn verify_getset_rp_sp() {
         let mut test_state = ProcessorState::new();
         let some_address: u16 = 0xfffe;
-        test_state.set_rp(some_address, 0b11);
-        assert_eq!(test_state.get_rp(0b11), some_address);
+        test_state.set_rp(some_address, 0b11.into());
+        assert_eq!(test_state.get_rp(0b11.into()), some_address);
     }
 
     #[test]
@@ -2035,6 +2099,7 @@ mod tests {
         assert_eq!(0xfffe, address_in_stack);
     }
 
+    #[test]
     fn verify_pop() {
         let mut test_state = ProcessorState::new();
         let mut si_mem = SpaceInvadersMemMap::new();
