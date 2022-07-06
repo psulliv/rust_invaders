@@ -92,6 +92,23 @@ impl ProcessorState {
             }
         }
     }
+
+    // Pushes an address to the stack
+    pub fn push_address(&mut self, mem_map: &mut SpaceInvadersMemMap, address: u16) {
+        mem_map[self.stack_pointer - 1] = ((address) >> 8) as u8;
+        // I should really look into the Rust std lib to figure out what the proper way to cut up bits is
+        // truncating may just work without the mask.
+        mem_map[self.stack_pointer - 2] = address as u8;
+        self.stack_pointer -= 2;
+    }
+
+    // Pops an address from the stack
+    pub fn pop_address(&mut self, mem_map: &mut SpaceInvadersMemMap) -> u16 {
+        let mut address = (mem_map[self.stack_pointer - 1] << 8) as u16;
+        address |= mem_map[self.stack_pointer - 2] as u16;
+        self.stack_pointer += 2;
+        address
+    }
 }
 
 pub struct SpaceInvadersMemMap {
@@ -2006,5 +2023,22 @@ mod tests {
         let some_address: u16 = 0xfffe;
         test_state.set_rp(some_address, 0b11);
         assert_eq!(test_state.get_rp(0b11), some_address);
+    }
+
+    #[test]
+    fn verify_push() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        test_state.push_address(&mut si_mem, 0xfffe);
+        let address_in_stack = ((si_mem[test_state.stack_pointer + 1] as u16) << 8)
+            | si_mem[test_state.stack_pointer] as u16;
+        assert_eq!(0xfffe, address_in_stack);
+    }
+
+    fn verify_pop() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        test_state.push_address(&mut si_mem, 0xfffe);
+        assert_eq!(0xfffe, test_state.pop_address(&mut si_mem));
     }
 }
