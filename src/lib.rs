@@ -109,14 +109,18 @@ mod machine;
 mod space_invaders_rom;
 
 use eighty_eighty_emulator::ProcessorState;
+use machine::MachineState;
+use machine::PortState;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-use web_sys::console;
 use std::rc::Rc;
 use std::sync::Mutex;
 
-
-// BonusLife, CoinInfo, NumLivesSwitch0 & 1, and Tilt not mapped to keyboard input.
+/*Note - The following aren't currently mapped to keyboard input, since the arcade
+    cabinet doesn't expose these buttons/switches to the player. May want to implement
+    clickable buttons instead for some/all of these:
+    BonusLife, CoinInfo, NumLivesSwitch0, NumLivesSwitch1, Tilt 
+*/
 fn map_keyboard_to_button(key: &str) -> Option<machine::Button> {
     match key {
         "KeyA" => Some(machine::Button::P1Left),
@@ -132,25 +136,26 @@ fn map_keyboard_to_button(key: &str) -> Option<machine::Button> {
     }
 }
 
-fn start_keyboard_listeners(m: Rc<Mutex<(String, bool)>>) {
+fn start_keyboard_listeners(m: Rc<Mutex<PortState>>) {
     let window = web_sys::window().expect("no global `window` exists");
-
     let down_m = m.clone();
     let keydown_closure = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| {
-        let is_down = event.type_().eq("keydown");
-        let mut button_state = down_m.lock().unwrap();
-        *button_state = (event.code(), is_down);
+        let button = map_keyboard_to_button(&(event.code()));
+        if button.is_some() {
+            down_m.lock().unwrap().button_up(button.unwrap());
+        }
     }) as Box<dyn FnMut(_)>);
     window
         .add_event_listener_with_callback("keydown", keydown_closure.as_ref().unchecked_ref())
         .unwrap();
     keydown_closure.forget();
 
+    let up_m = m.clone();
     let keyup_closure = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| {
-        let is_down = !event.type_().eq("keyup");
-        let mut button_state = m.lock().unwrap();
-        // Update button state
-        *button_state = (event.code(), is_down);
+        let button = map_keyboard_to_button(&(event.code()));
+        if button.is_some() {
+            up_m.lock().unwrap().button_down(button.unwrap());
+        }   
     }) as Box<dyn FnMut(_)>);
     window
         .add_event_listener_with_callback("keyup", keyup_closure.as_ref().unchecked_ref())
@@ -170,10 +175,11 @@ pub fn start() {
     #[cfg(feature = "console_error_panic_hook")]
     console_error_panic_hook::set_once();
 
-    let keyboard_input = ("".to_string(), false);
-    let m = Rc::new(Mutex::new(keyboard_input));
+    let this_machine = MachineState::new();
+    let read_ports = this_machine.port_state;
+    let m = Rc::new(Mutex::new(read_ports));
     start_keyboard_listeners(m.clone());
 
-    //let this_processor = ProcessorState::new();
-    //emulation_loop(this_processor, &space_invaders_rom::SPACE_INVADERS_ROM);
+    let this_processor = ProcessorState::new();
+    emulation_loop(this_processor, &space_invaders_rom::SPACE_INVADERS_ROM);
 }
