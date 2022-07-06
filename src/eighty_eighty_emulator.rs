@@ -44,7 +44,7 @@ impl ProcessorState {
             reg_e: 0,
             reg_h: 0,
             reg_l: 0,
-            stack_pointer: 0x23ff,
+            stack_pointer: 0x2400,
             prog_counter: 0,
             flags: ConditionFlags {
                 bits: (0b0000_0000),
@@ -1625,7 +1625,7 @@ mod tests {
         assert_eq!(test_state.prog_counter, 0x0020);
         assert_eq!(test_state.stack_pointer, orig_stack_add - 2);
     }
-
+    #[test]
     fn call_nz() {
         let mut test_state = ProcessorState::new();
         let mut si_mem = SpaceInvadersMemMap::new();
@@ -1651,6 +1651,7 @@ mod tests {
         assert_eq!(test_state.stack_pointer, orig_stack_add - 2);
     }
 
+    #[test]
     fn call_z() {
         let mut test_state = ProcessorState::new();
         let mut si_mem = SpaceInvadersMemMap::new();
@@ -1676,6 +1677,7 @@ mod tests {
         assert_eq!(test_state.stack_pointer, orig_stack_add - 2);
     }
 
+    #[test]
     fn call_nc() {
         let mut test_state = ProcessorState::new();
         let mut si_mem = SpaceInvadersMemMap::new();
@@ -1700,6 +1702,8 @@ mod tests {
         assert_eq!(test_state.prog_counter, 0x0020);
         assert_eq!(test_state.stack_pointer, orig_stack_add - 2);
     }
+
+    #[test]
     fn call_c() {
         let mut test_state = ProcessorState::new();
         let mut si_mem = SpaceInvadersMemMap::new();
@@ -1724,7 +1728,7 @@ mod tests {
         assert_eq!(test_state.prog_counter, 0x0020);
         assert_eq!(test_state.stack_pointer, orig_stack_add - 2);
     }
-
+    #[test]
     fn call_po() {
         let mut test_state = ProcessorState::new();
         let mut si_mem = SpaceInvadersMemMap::new();
@@ -1749,7 +1753,7 @@ mod tests {
         assert_eq!(test_state.prog_counter, 0x0020);
         assert_eq!(test_state.stack_pointer, orig_stack_add - 2);
     }
-
+    #[test]
     fn call_pe() {
         let mut test_state = ProcessorState::new();
         let mut si_mem = SpaceInvadersMemMap::new();
@@ -1774,7 +1778,7 @@ mod tests {
         assert_eq!(test_state.prog_counter, 0x0020);
         assert_eq!(test_state.stack_pointer, orig_stack_add - 2);
     }
-
+    #[test]
     fn call_p() {
         let mut test_state = ProcessorState::new();
         let mut si_mem = SpaceInvadersMemMap::new();
@@ -1799,7 +1803,7 @@ mod tests {
         assert_eq!(test_state.prog_counter, 0x0020);
         assert_eq!(test_state.stack_pointer, orig_stack_add - 2);
     }
-
+    #[test]
     fn call_m() {
         let mut test_state = ProcessorState::new();
         let mut si_mem = SpaceInvadersMemMap::new();
