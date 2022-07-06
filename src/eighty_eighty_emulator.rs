@@ -1055,8 +1055,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0xf4 => {
-            panic!(" 	CP adr	3		if P, PC <- adr");
-            // 3
+            opcode_call(state, mem_map);
         }
         0xf5 => {
             panic!(" 	PUSH PSW	1		(sp-2)<-flags; (sp-1)<-A; sp <- sp - 2");
@@ -1130,7 +1129,7 @@ fn opcode_call(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     // PE (even parity, bit set) 101
     // P (sign bit not set) 110
     // M (sign bit set) 111
-    let cur_instruction = mem_map[state.prog_counter + 1];
+    let cur_instruction = mem_map[state.prog_counter];
     let second_byte = mem_map[state.prog_counter + 1];
     let third_byte = mem_map[state.prog_counter + 2];
     let condition = (cur_instruction & 0b00_111_000) >> 3;
@@ -1621,7 +1620,7 @@ mod tests {
         test_rom[1] = second_byte;
         test_rom[2] = third_byte;
         si_mem.rom = test_rom;
-        let address = iterate_processor_state(&mut test_state, &mut si_mem);
+        iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.prog_counter, 0x0020);
         assert_eq!(test_state.stack_pointer, orig_stack_add - 2);
     }
@@ -1640,13 +1639,14 @@ mod tests {
         test_rom[2] = third_byte;
         si_mem.rom = test_rom;
         test_state.flags.set(ConditionFlags::Z, true);
-        let address = iterate_processor_state(&mut test_state, &mut si_mem);
+        iterate_processor_state(&mut test_state, &mut si_mem);
 
         // We want to make sure that it isn't doing the thing that it shouldn't
         assert_ne!(test_state.prog_counter, 0x0020);
         assert_ne!(test_state.stack_pointer, orig_stack_add - 2);
         test_state.prog_counter = 0;
         test_state.flags.set(ConditionFlags::Z, false);
+        iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.prog_counter, 0x0020);
         assert_eq!(test_state.stack_pointer, orig_stack_add - 2);
     }
@@ -1666,13 +1666,14 @@ mod tests {
         test_rom[2] = third_byte;
         si_mem.rom = test_rom;
         test_state.flags.set(ConditionFlags::Z, false);
-        let address = iterate_processor_state(&mut test_state, &mut si_mem);
+        iterate_processor_state(&mut test_state, &mut si_mem);
 
         // We want to make sure that it isn't doing the thing that it shouldn't
         assert_ne!(test_state.prog_counter, 0x0020);
         assert_ne!(test_state.stack_pointer, orig_stack_add - 2);
         test_state.prog_counter = 0;
         test_state.flags.set(ConditionFlags::Z, true);
+        iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.prog_counter, 0x0020);
         assert_eq!(test_state.stack_pointer, orig_stack_add - 2);
     }
@@ -1692,13 +1693,14 @@ mod tests {
         test_rom[2] = third_byte;
         si_mem.rom = test_rom;
         test_state.flags.set(ConditionFlags::CY, true);
-        let address = iterate_processor_state(&mut test_state, &mut si_mem);
+        iterate_processor_state(&mut test_state, &mut si_mem);
 
         // We want to make sure that it isn't doing the thing that it shouldn't
         assert_ne!(test_state.prog_counter, 0x0020);
         assert_ne!(test_state.stack_pointer, orig_stack_add - 2);
         test_state.prog_counter = 0;
         test_state.flags.set(ConditionFlags::CY, false);
+        iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.prog_counter, 0x0020);
         assert_eq!(test_state.stack_pointer, orig_stack_add - 2);
     }
@@ -1718,13 +1720,14 @@ mod tests {
         test_rom[2] = third_byte;
         si_mem.rom = test_rom;
         test_state.flags.set(ConditionFlags::CY, false);
-        let address = iterate_processor_state(&mut test_state, &mut si_mem);
+        iterate_processor_state(&mut test_state, &mut si_mem);
 
         // We want to make sure that it isn't doing the thing that it shouldn't
         assert_ne!(test_state.prog_counter, 0x0020);
         assert_ne!(test_state.stack_pointer, orig_stack_add - 2);
         test_state.prog_counter = 0;
         test_state.flags.set(ConditionFlags::CY, true);
+        iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.prog_counter, 0x0020);
         assert_eq!(test_state.stack_pointer, orig_stack_add - 2);
     }
@@ -1743,13 +1746,14 @@ mod tests {
         test_rom[2] = third_byte;
         si_mem.rom = test_rom;
         test_state.flags.set(ConditionFlags::P, true);
-        let address = iterate_processor_state(&mut test_state, &mut si_mem);
+        iterate_processor_state(&mut test_state, &mut si_mem);
 
         // We want to make sure that it isn't doing the thing that it shouldn't
         assert_ne!(test_state.prog_counter, 0x0020);
         assert_ne!(test_state.stack_pointer, orig_stack_add - 2);
         test_state.prog_counter = 0;
         test_state.flags.set(ConditionFlags::P, false);
+        iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.prog_counter, 0x0020);
         assert_eq!(test_state.stack_pointer, orig_stack_add - 2);
     }
@@ -1768,13 +1772,14 @@ mod tests {
         test_rom[2] = third_byte;
         si_mem.rom = test_rom;
         test_state.flags.set(ConditionFlags::P, false);
-        let address = iterate_processor_state(&mut test_state, &mut si_mem);
+        iterate_processor_state(&mut test_state, &mut si_mem);
 
         // We want to make sure that it isn't doing the thing that it shouldn't
         assert_ne!(test_state.prog_counter, 0x0020);
         assert_ne!(test_state.stack_pointer, orig_stack_add - 2);
         test_state.prog_counter = 0;
         test_state.flags.set(ConditionFlags::P, true);
+        iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.prog_counter, 0x0020);
         assert_eq!(test_state.stack_pointer, orig_stack_add - 2);
     }
@@ -1793,13 +1798,14 @@ mod tests {
         test_rom[2] = third_byte;
         si_mem.rom = test_rom;
         test_state.flags.set(ConditionFlags::S, true);
-        let address = iterate_processor_state(&mut test_state, &mut si_mem);
+        iterate_processor_state(&mut test_state, &mut si_mem);
 
         // We want to make sure that it isn't doing the thing that it shouldn't
         assert_ne!(test_state.prog_counter, 0x0020);
         assert_ne!(test_state.stack_pointer, orig_stack_add - 2);
         test_state.prog_counter = 0;
         test_state.flags.set(ConditionFlags::S, false);
+        iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.prog_counter, 0x0020);
         assert_eq!(test_state.stack_pointer, orig_stack_add - 2);
     }
@@ -1818,13 +1824,14 @@ mod tests {
         test_rom[2] = third_byte;
         si_mem.rom = test_rom;
         test_state.flags.set(ConditionFlags::S, false);
-        let address = iterate_processor_state(&mut test_state, &mut si_mem);
+        iterate_processor_state(&mut test_state, &mut si_mem);
 
         // We want to make sure that it isn't doing the thing that it shouldn't
         assert_ne!(test_state.prog_counter, 0x0020);
         assert_ne!(test_state.stack_pointer, orig_stack_add - 2);
         test_state.prog_counter = 0;
         test_state.flags.set(ConditionFlags::S, true);
+        iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.prog_counter, 0x0020);
         assert_eq!(test_state.stack_pointer, orig_stack_add - 2);
     }
