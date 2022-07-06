@@ -1104,7 +1104,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
     };
 }
 
-/// CALL addr
+/// CALL,CNZ, CZ, CNC, CC, CPO, CPE, CP, CM addr
 /// ((SP) - 1) ~ (PCH) [program counter high bits]
 /// ((SP) - 2) ~ (PCl) [program counter low bits]
 /// (SP) ~ (SP) - 2 [reduce current stack pointer by two]
@@ -1612,6 +1612,7 @@ mod tests {
         let mut test_state = ProcessorState::new();
         let mut si_mem = SpaceInvadersMemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        let mut orig_stack_add = test_state.stack_pointer;
         // 0b1100_1101 is unconditional call
         test_rom[0] = 0b1100_1101;
         let some_rando_address = 0x0020;
@@ -1622,5 +1623,205 @@ mod tests {
         si_mem.rom = test_rom;
         let address = iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.prog_counter, 0x0020);
+        assert_eq!(test_state.stack_pointer, orig_stack_add - 2);
+    }
+
+    fn call_nz() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        let mut orig_stack_add = test_state.stack_pointer;
+        // 0b11_000_100 is cnz
+        test_rom[0] = 0b11_000_100;
+        let some_rando_address = 0x0020;
+        let second_byte = (some_rando_address & 0x00ff) as u8;
+        let third_byte = ((some_rando_address & 0xff00) >> 8) as u8;
+        test_rom[1] = second_byte;
+        test_rom[2] = third_byte;
+        si_mem.rom = test_rom;
+        test_state.flags.set(ConditionFlags::Z, true);
+        let address = iterate_processor_state(&mut test_state, &mut si_mem);
+
+        // We want to make sure that it isn't doing the thing that it shouldn't
+        assert_ne!(test_state.prog_counter, 0x0020);
+        assert_ne!(test_state.stack_pointer, orig_stack_add - 2);
+        test_state.prog_counter = 0;
+        test_state.flags.set(ConditionFlags::Z, false);
+        assert_eq!(test_state.prog_counter, 0x0020);
+        assert_eq!(test_state.stack_pointer, orig_stack_add - 2);
+    }
+
+    fn call_z() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        let mut orig_stack_add = test_state.stack_pointer;
+        // 0b11_001_100 is cz
+        test_rom[0] = 0b11_001_100;
+        let some_rando_address = 0x0020;
+        let second_byte = (some_rando_address & 0x00ff) as u8;
+        let third_byte = ((some_rando_address & 0xff00) >> 8) as u8;
+        test_rom[1] = second_byte;
+        test_rom[2] = third_byte;
+        si_mem.rom = test_rom;
+        test_state.flags.set(ConditionFlags::Z, false);
+        let address = iterate_processor_state(&mut test_state, &mut si_mem);
+
+        // We want to make sure that it isn't doing the thing that it shouldn't
+        assert_ne!(test_state.prog_counter, 0x0020);
+        assert_ne!(test_state.stack_pointer, orig_stack_add - 2);
+        test_state.prog_counter = 0;
+        test_state.flags.set(ConditionFlags::Z, true);
+        assert_eq!(test_state.prog_counter, 0x0020);
+        assert_eq!(test_state.stack_pointer, orig_stack_add - 2);
+    }
+
+    fn call_nc() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        let mut orig_stack_add = test_state.stack_pointer;
+        // 0b11_010_100 is cnc
+        test_rom[0] = 0b11_010_100;
+        let some_rando_address = 0x0020;
+        let second_byte = (some_rando_address & 0x00ff) as u8;
+        let third_byte = ((some_rando_address & 0xff00) >> 8) as u8;
+        test_rom[1] = second_byte;
+        test_rom[2] = third_byte;
+        si_mem.rom = test_rom;
+        test_state.flags.set(ConditionFlags::CY, true);
+        let address = iterate_processor_state(&mut test_state, &mut si_mem);
+
+        // We want to make sure that it isn't doing the thing that it shouldn't
+        assert_ne!(test_state.prog_counter, 0x0020);
+        assert_ne!(test_state.stack_pointer, orig_stack_add - 2);
+        test_state.prog_counter = 0;
+        test_state.flags.set(ConditionFlags::CY, false);
+        assert_eq!(test_state.prog_counter, 0x0020);
+        assert_eq!(test_state.stack_pointer, orig_stack_add - 2);
+    }
+    fn call_c() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        let mut orig_stack_add = test_state.stack_pointer;
+        // 0b11_011_100 is cc
+        test_rom[0] = 0b11_011_100;
+        let some_rando_address = 0x0020;
+        let second_byte = (some_rando_address & 0x00ff) as u8;
+        let third_byte = ((some_rando_address & 0xff00) >> 8) as u8;
+        test_rom[1] = second_byte;
+        test_rom[2] = third_byte;
+        si_mem.rom = test_rom;
+        test_state.flags.set(ConditionFlags::CY, false);
+        let address = iterate_processor_state(&mut test_state, &mut si_mem);
+
+        // We want to make sure that it isn't doing the thing that it shouldn't
+        assert_ne!(test_state.prog_counter, 0x0020);
+        assert_ne!(test_state.stack_pointer, orig_stack_add - 2);
+        test_state.prog_counter = 0;
+        test_state.flags.set(ConditionFlags::CY, true);
+        assert_eq!(test_state.prog_counter, 0x0020);
+        assert_eq!(test_state.stack_pointer, orig_stack_add - 2);
+    }
+
+    fn call_po() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        let mut orig_stack_add = test_state.stack_pointer;
+        // 0b11_100_100 is cpo
+        test_rom[0] = 0b11_100_100;
+        let some_rando_address = 0x0020;
+        let second_byte = (some_rando_address & 0x00ff) as u8;
+        let third_byte = ((some_rando_address & 0xff00) >> 8) as u8;
+        test_rom[1] = second_byte;
+        test_rom[2] = third_byte;
+        si_mem.rom = test_rom;
+        test_state.flags.set(ConditionFlags::P, true);
+        let address = iterate_processor_state(&mut test_state, &mut si_mem);
+
+        // We want to make sure that it isn't doing the thing that it shouldn't
+        assert_ne!(test_state.prog_counter, 0x0020);
+        assert_ne!(test_state.stack_pointer, orig_stack_add - 2);
+        test_state.prog_counter = 0;
+        test_state.flags.set(ConditionFlags::P, false);
+        assert_eq!(test_state.prog_counter, 0x0020);
+        assert_eq!(test_state.stack_pointer, orig_stack_add - 2);
+    }
+
+    fn call_pe() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        let mut orig_stack_add = test_state.stack_pointer;
+        // 0b11_101_100 is cpo
+        test_rom[0] = 0b11_101_100;
+        let some_rando_address = 0x0020;
+        let second_byte = (some_rando_address & 0x00ff) as u8;
+        let third_byte = ((some_rando_address & 0xff00) >> 8) as u8;
+        test_rom[1] = second_byte;
+        test_rom[2] = third_byte;
+        si_mem.rom = test_rom;
+        test_state.flags.set(ConditionFlags::P, false);
+        let address = iterate_processor_state(&mut test_state, &mut si_mem);
+
+        // We want to make sure that it isn't doing the thing that it shouldn't
+        assert_ne!(test_state.prog_counter, 0x0020);
+        assert_ne!(test_state.stack_pointer, orig_stack_add - 2);
+        test_state.prog_counter = 0;
+        test_state.flags.set(ConditionFlags::P, true);
+        assert_eq!(test_state.prog_counter, 0x0020);
+        assert_eq!(test_state.stack_pointer, orig_stack_add - 2);
+    }
+
+    fn call_p() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        let mut orig_stack_add = test_state.stack_pointer;
+        // 0b11_110_100 is cp
+        test_rom[0] = 0b11_110_100;
+        let some_rando_address = 0x0020;
+        let second_byte = (some_rando_address & 0x00ff) as u8;
+        let third_byte = ((some_rando_address & 0xff00) >> 8) as u8;
+        test_rom[1] = second_byte;
+        test_rom[2] = third_byte;
+        si_mem.rom = test_rom;
+        test_state.flags.set(ConditionFlags::S, true);
+        let address = iterate_processor_state(&mut test_state, &mut si_mem);
+
+        // We want to make sure that it isn't doing the thing that it shouldn't
+        assert_ne!(test_state.prog_counter, 0x0020);
+        assert_ne!(test_state.stack_pointer, orig_stack_add - 2);
+        test_state.prog_counter = 0;
+        test_state.flags.set(ConditionFlags::S, false);
+        assert_eq!(test_state.prog_counter, 0x0020);
+        assert_eq!(test_state.stack_pointer, orig_stack_add - 2);
+    }
+
+    fn call_m() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        let mut orig_stack_add = test_state.stack_pointer;
+        // 0b11_111_100 is cp
+        test_rom[0] = 0b11_111_100;
+        let some_rando_address = 0x0020;
+        let second_byte = (some_rando_address & 0x00ff) as u8;
+        let third_byte = ((some_rando_address & 0xff00) >> 8) as u8;
+        test_rom[1] = second_byte;
+        test_rom[2] = third_byte;
+        si_mem.rom = test_rom;
+        test_state.flags.set(ConditionFlags::S, false);
+        let address = iterate_processor_state(&mut test_state, &mut si_mem);
+
+        // We want to make sure that it isn't doing the thing that it shouldn't
+        assert_ne!(test_state.prog_counter, 0x0020);
+        assert_ne!(test_state.stack_pointer, orig_stack_add - 2);
+        test_state.prog_counter = 0;
+        test_state.flags.set(ConditionFlags::S, true);
+        assert_eq!(test_state.prog_counter, 0x0020);
+        assert_eq!(test_state.stack_pointer, orig_stack_add - 2);
     }
 }
