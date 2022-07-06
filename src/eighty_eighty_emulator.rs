@@ -8,7 +8,7 @@ use std::{
     ops::{Index, IndexMut},
 };
 
-use crate::space_invaders_rom;
+use crate::{debug_utils::debug_print_op_code, space_invaders_rom};
 
 bitflags! {
     struct ConditionFlags: u8 {
@@ -97,6 +97,7 @@ impl IndexMut<u16> for SpaceInvadersMemMap {
 pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     // get the next opcode at the current program counter
     let cur_instruction = mem_map[state.prog_counter];
+    debug_print_op_code(cur_instruction);
     match cur_instruction {
         0x00 => {
             opcode_nop(state);
@@ -136,7 +137,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0x0a => {
-            panic!(" 	LDAX B	1		A <- (BC)");
+            opcode_ldax(state, mem_map);
             // 1
         }
         0x0b => {
@@ -197,8 +198,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0x1a => {
-            panic!(" 	LDAX D	1		A <- (DE)");
-            // 1
+            opcode_ldax(state, mem_map);
         }
         0x1b => {
             panic!(" 	DCX D	1		DE = DE-1");
@@ -286,7 +286,6 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
         }
         0x31 => {
             opcode_lxi(state, mem_map);
-            // 3
         }
         0x32 => {
             panic!(" 	STA adr	3		(adr) <- A");
@@ -1101,6 +1100,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
     };
+    println!("{:#?}", state);
 }
 
 /// CALL,CNZ, CZ, CNC, CC, CPO, CPE, CP, CM addr
@@ -1162,6 +1162,30 @@ fn opcode_nop(state: &mut ProcessorState) {
     state.prog_counter += 1;
 }
 
+/// INX (increment register pair)
+/// (rh) (rl) ..- (rh) (rl) + 1
+/// The content of the register pair rp is incremented by
+/// one. Note: No condition flags are affected
+fn opcode_inx(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
+    let rp_bits = (mem_map[state.prog_counter] & 0b00_11_0000) >> 4;
+    match rp_bits {
+        0b0000_0000 => {
+            // register pair B-C
+            let address = (state.reg_b as u16) << 8 | state.reg_c as u16;
+            state.reg_a = mem_map[address];
+        }
+        0b0000_0001 => {
+            // register pair D-E
+            let address = (state.reg_d as u16) << 8 | state.reg_e as u16;
+            state.reg_a = mem_map[address];
+        }
+        _ => {
+            panic!("unhandled register pair bits in opcode_ldax");
+        }
+    }
+    state.prog_counter += 1;
+}
+
 /// JMP addr (Jump)
 /// (PC) ~ (byte 3) (byte 2)
 /// Control is transferred to the instruction whose ad-
@@ -1175,6 +1199,32 @@ fn opcode_jmp(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     // Need to be usize since it's used as an array index
     let address = ((third_byte as u16) << 8 | (second_byte as u16));
     state.prog_counter = address;
+}
+
+/// LDAX rp (load accumulator direct)
+/// (A)~ ((rp))
+/// The content of the memory location, whose address
+/// is in the register pair rp, is moved to register A. Note:
+/// only register pairs rp=B (registers B and C·) or rp=D
+/// (registers D and E) may be specified.
+fn opcode_ldax(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
+    let rp_bits = (mem_map[state.prog_counter] & 0b00_11_0000) >> 4;
+    match rp_bits {
+        0b0000_0000 => {
+            // register pair B-C
+            let address = (state.reg_b as u16) << 8 | state.reg_c as u16;
+            state.reg_a = mem_map[address];
+        }
+        0b0000_0001 => {
+            // register pair D-E
+            let address = (state.reg_d as u16) << 8 | state.reg_e as u16;
+            state.reg_a = mem_map[address];
+        }
+        _ => {
+            panic!("unhandled register pair bits in opcode_ldax");
+        }
+    }
+    state.prog_counter += 1;
 }
 
 /// LXI rp, data 16 (Load register pair immediate)
