@@ -98,8 +98,6 @@ impl ProcessorState {
     // Pushes an address to the stack
     pub fn push_address(&mut self, mem_map: &mut SpaceInvadersMemMap, address: u16) {
         mem_map[self.stack_pointer - 1] = ((address) >> 8) as u8;
-        // I should really look into the Rust std lib to figure out what the proper way to cut up bits is
-        // truncating may just work without the mask.
         mem_map[self.stack_pointer - 2] = address as u8;
         self.stack_pointer -= 2;
     }
@@ -183,6 +181,9 @@ pub enum RegisterBitPattern {
     E = 0b011,
     H = 0b100,
     L = 0b101,
+    // Not really a register but pattern is used that way, sometimes means memory
+    // sometimes means its another direction of operation.
+    Other = 0b110,
 }
 
 impl From<u8> for RegisterBitPattern {
@@ -195,6 +196,7 @@ impl From<u8> for RegisterBitPattern {
             0b011 => RegisterBitPattern::E,
             0b100 => RegisterBitPattern::H,
             0b101 => RegisterBitPattern::L,
+            0b110 => RegisterBitPattern::Other,
             _ => panic!("Failed to parse u8 to RegisterBitPattern"),
         }
     }
@@ -1307,7 +1309,6 @@ fn opcode_inx(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     let rp_bits: RPairBitPattern = ((mem_map[state.prog_counter] & 0b00_11_0000) >> 4).into();
     let rp_16 = state.get_rp(rp_bits);
     state.set_rp(rp_16 + 1, rp_bits);
-
     state.prog_counter += 1;
 }
 
@@ -1333,14 +1334,14 @@ fn opcode_jmp(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
 /// only register pairs rp=B (registers B and C·) or rp=D
 /// (registers D and E) may be specified.
 fn opcode_ldax(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
-    let rp_bits = (mem_map[state.prog_counter] & 0b00_11_0000) >> 4;
+    let rp_bits: RPairBitPattern = ((mem_map[state.prog_counter] & 0b00_11_0000) >> 4).into();
     match rp_bits {
-        0b0000_0000 => {
+        RPairBitPattern::BC => {
             // register pair B-C
             let address = (state.reg_b as u16) << 8 | state.reg_c as u16;
             state.reg_a = mem_map[address];
         }
-        0b0000_0001 => {
+        RPairBitPattern::DE => {
             // register pair D-E
             let address = (state.reg_d as u16) << 8 | state.reg_e as u16;
             state.reg_a = mem_map[address];
@@ -1369,25 +1370,25 @@ fn opcode_lxi(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     let third_byte = mem_map[state.prog_counter + 2];
     // Masking and shifting so that we can use this as a match that looks similar
     // to the RP legend in the book.
-    let rp_bits = (cur_instruction & 0b0011_0000) >> 4;
+    let rp_bits: RPairBitPattern = ((cur_instruction & 0b0011_0000) >> 4).into();
     state.prog_counter += 3;
     match rp_bits {
-        0b0000_0000 => {
+        RPairBitPattern::BC => {
             // register pair B-C
             state.reg_b = third_byte;
             state.reg_c = second_byte;
         }
-        0b0000_0001 => {
+        RPairBitPattern::DE => {
             // register pair D-E
             state.reg_d = third_byte;
             state.reg_e = second_byte;
         }
-        0b0000_0010 => {
+        RPairBitPattern::HL => {
             // register pair H-L
             state.reg_h = third_byte;
             state.reg_l = second_byte;
         }
-        0b0000_0011 => {
+        RPairBitPattern::SP => {
             // register SP
             state.stack_pointer = (third_byte as u16) << 8 | (second_byte as u16);
         }
@@ -1413,49 +1414,47 @@ fn opcode_mov(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     // test to see if this is a move to or from memory
 
     let cur_instruction = mem_map[state.prog_counter];
-    let dest = (cur_instruction & 0b00_111_000) >> 3;
-    let src = cur_instruction & 0b00_000_111;
-    if dest == 0b110 {
+    let dest: RegisterBitPattern = ((cur_instruction & 0b00_111_000) >> 3).into();
+    let src: RegisterBitPattern = (cur_instruction & 0b00_000_111).into();
+    if dest == RegisterBitPattern::Other {
         // then this is a 0 | 1 | 1 | 1 | 0 | S | S | S
         // format opcode and moving from `src` to memory
         // in pair H-L
         match src {
             // A
-            0b111 => {
-                let address = state.reg_h as u16;
-            }
+            RegisterBitPattern::A => {}
             // B
-            0b000 => {}
+            RegisterBitPattern::B => {}
             // C
-            0b001 => {}
+            RegisterBitPattern::C => {}
             // D
-            0b010 => {}
+            RegisterBitPattern::D => {}
             // E
-            0b011 => {}
+            RegisterBitPattern::E => {}
             // H
-            0b100 => {}
+            RegisterBitPattern::H => {}
             // L
-            0b101 => {}
+            RegisterBitPattern::L => {}
             _ => {}
         }
-    } else if src == 0b110 {
+    } else if src == RegisterBitPattern::Other {
         // then this is a 0 | 1 | D | D | D | 1 | 1 | 0
         // format opcode, use dest
         match dest {
             // A
-            0b111 => {}
+            RegisterBitPattern::A => {}
             // B
-            0b000 => {}
+            RegisterBitPattern::B => {}
             // C
-            0b001 => {}
+            RegisterBitPattern::C => {}
             // D
-            0b010 => {}
+            RegisterBitPattern::D => {}
             // E
-            0b011 => {}
+            RegisterBitPattern::E => {}
             // H
-            0b100 => {}
+            RegisterBitPattern::H => {}
             // L
-            0b101 => {}
+            RegisterBitPattern::L => {}
             _ => {}
         }
     } else {
@@ -1552,7 +1551,8 @@ fn opcode_mvi(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
 // for the register and register pair values at least, maybe so far as consts for the
 // masking bits. replacing the match statement in the iterate_processor_state call
 // may not be possible but it could be reasonable if every piece has a From trait
-// implemented.
+// implemented. One of the problems is that making an opcode enum From trait implementation
+// is that a lot of this stuff has multiple bytes involved.
 
 // Todo: replace the panics with Err valuse that aggregate into a good error message at a single
 // panic! near the top and handle the errors that can be handled. Most of this shouldn't be
@@ -2105,5 +2105,37 @@ mod tests {
         let mut si_mem = SpaceInvadersMemMap::new();
         test_state.push_address(&mut si_mem, 0xfffe);
         assert_eq!(0xfffe, test_state.pop_address(&mut si_mem));
+    }
+
+    #[test]
+    fn mov_a_mem() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // register pair d-e is 01
+        test_rom[0] = 0b01_110_111;
+        let some_rando_address = 0x0020;
+        test_state.reg_a = 0xff;
+        test_state.reg_h = (some_rando_address >> 8) as u8;
+        test_state.reg_l = some_rando_address as u8;
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, si_mem[some_rando_address]);
+    }
+
+    #[test]
+    fn mov_mem_a() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // register pair d-e is 01
+        test_rom[0] = 0b01_110_111;
+        let some_rando_address = 0x0020;
+        test_rom[some_rando_address] = 0xff;
+        test_state.reg_h = (some_rando_address >> 8) as u8;
+        test_state.reg_l = some_rando_address as u8;
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0xff);
     }
 }
