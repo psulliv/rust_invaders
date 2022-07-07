@@ -390,8 +390,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             opcode_lxi(state, mem_map);
         }
         0x22 => {
-            panic!(" 	SHLD adr	3		(adr) <-L; (adr+1)<-H");
-            // 3
+            opcode_shld(state, mem_map);
         }
         0x23 => {
             opcode_inx(state, mem_map);
@@ -1420,6 +1419,22 @@ fn opcode_lhld(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     let address = two_le_eights_to_one_sixteen(second_byte, third_byte);
     state.reg_l = mem_map[address];
     state.reg_h = mem_map[address + 1];
+    state.prog_counter += 3;
+}
+
+/// SHLD addr (Store Hand L direct)
+/// ((byte 3) (byte 2)) ~ (L)
+/// ((byte 3)(byte 2) + 1) ~ (H)
+/// The content of register L is moved to the memory lo-
+/// cation whose address is specified in byte 2 and byte
+/// 3. The content of register H is moved to the succeed-
+/// ing memory location.
+fn opcode_shld(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
+    let second_byte = mem_map[state.prog_counter + 1];
+    let third_byte = mem_map[state.prog_counter + 2];
+    let address = two_le_eights_to_one_sixteen(second_byte, third_byte);
+    mem_map[address] = state.reg_l;
+    mem_map[address + 1] = state.reg_h;
     state.prog_counter += 3;
 }
 
@@ -2735,5 +2750,26 @@ mod tests {
         iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.reg_l, 0xbe);
         assert_eq!(test_state.reg_h, 0xef);
+    }
+
+    #[test]
+    fn shld() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+
+        test_rom[0] = 0b00_100_010;
+        let some_address: u16 = 0x1337;
+        test_rom[1] = some_address as u8;
+        test_rom[2] = (some_address >> 8) as u8;
+        test_state.reg_l = 0xbe;
+        test_state.reg_h = 0xef;
+        si_mem.rom = test_rom;
+
+        assert_ne!(si_mem[some_address], 0xbe);
+        assert_ne!(si_mem[some_address + 1], 0xef);
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(si_mem[some_address], 0xbe);
+        assert_eq!(si_mem[some_address + 1], 0xef);
     }
 }
