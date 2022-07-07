@@ -269,8 +269,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             opcode_lxi(state, mem_map);
         }
         0x02 => {
-            panic!(" 	STAX B	1		(BC) <- A");
-            // 1
+            opcode_stax(state, mem_map);
         }
         0x03 => {
             opcode_inx(state, mem_map);
@@ -330,8 +329,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             opcode_lxi(state, mem_map);
         }
         0x12 => {
-            panic!(" 	STAX D	1		(DE) <- A");
-            // 1
+            opcode_stax(state, mem_map);
         }
         0x13 => {
             opcode_inx(state, mem_map);
@@ -1159,8 +1157,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 3
         }
         0xeb => {
-            panic!(" 	XCHG	1		H <-> D; L <-> E");
-            // 1
+            opcode_xchg(state, mem_map);
         }
         0xec => {
             opcode_call(state, mem_map);
@@ -1337,6 +1334,48 @@ fn opcode_ldax(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
             panic!("unhandled register pair bits in opcode_ldax");
         }
     }
+    state.prog_counter += 1;
+}
+
+/// STAX rp (Store accumulator indirect)
+/// ((rp)) ~ (A)
+/// The content of register A is moved to the memory lo-
+/// cation whose address is in the register pair rp. Note:
+/// only register pairs rp=B (registers B and C) or rp=D
+/// (registers D and E) may be specified.
+fn opcode_stax(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
+    let cur_instruction = mem_map[state.prog_counter];
+    let rp_bits: RPairBitPattern = ((cur_instruction & 0b00_11_0000) >> 4).into();
+    match rp_bits {
+        RPairBitPattern::BC => {
+            // register pair B-C
+            let address = (state.reg_b as u16) << 8 | state.reg_c as u16;
+            mem_map[address] = state.reg_a;
+        }
+        RPairBitPattern::DE => {
+            // register pair D-E
+            let address = (state.reg_d as u16) << 8 | state.reg_e as u16;
+            mem_map[address] = state.reg_a;
+        }
+        _ => {
+            panic!("unhandled register pair bits in opcode_ldax");
+        }
+    }
+    state.prog_counter += 1;
+}
+
+/// XCHG (Exchange H and L with D and E)
+/// (H)~(D)
+/// (L)~(E)
+/// The contents of registers Hand L are exchanged with
+/// the contents of registers D and E.
+fn opcode_xchg(state: &mut ProcessorState, _mem_map: &mut SpaceInvadersMemMap) {
+    let temp_d = state.reg_d;
+    state.reg_d = state.reg_h;
+    state.reg_h = temp_d;
+    let temp_e = state.reg_e;
+    state.reg_e = state.reg_l;
+    state.reg_l = temp_e;
     state.prog_counter += 1;
 }
 
@@ -2771,5 +2810,48 @@ mod tests {
         iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(si_mem[some_address], 0xbe);
         assert_eq!(si_mem[some_address + 1], 0xef);
+    }
+
+    #[test]
+    fn stax() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+
+        // Testing rp BC
+        test_rom[0] = 0b00_00_0010;
+        let some_address: u16 = 0x1337;
+        test_state.reg_c = some_address as u8;
+        test_state.reg_b = (some_address >> 8) as u8;
+        test_state.reg_a = 0xfe;
+
+        si_mem.rom = test_rom;
+
+        assert_ne!(si_mem[some_address], 0xfe);
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(si_mem[some_address], 0xfe);
+    }
+
+    #[test]
+    fn xchg() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        si_mem.rom = test_rom;
+
+        test_rom[0] = 0b1110_1011;
+        si_mem.rom = test_rom;
+        test_state.reg_d = 0xbe;
+        test_state.reg_e = 0xef;
+
+        assert_eq!(test_state.reg_h, 0x00);
+        assert_eq!(test_state.reg_l, 0x00);
+        assert_eq!(test_state.reg_d, 0xbe);
+        assert_eq!(test_state.reg_e, 0xef);
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_h, 0xbe);
+        assert_eq!(test_state.reg_l, 0xef);
+        assert_eq!(test_state.reg_d, 0x00);
+        assert_eq!(test_state.reg_e, 0x00);
     }
 }
