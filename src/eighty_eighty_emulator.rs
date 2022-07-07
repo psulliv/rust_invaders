@@ -109,6 +109,19 @@ impl ProcessorState {
         self.stack_pointer += 2;
         address
     }
+
+    pub fn check_condition(&self, condition: ConditionBitPattern) -> bool {
+        match condition {
+            ConditionBitPattern::NZ => !(self.flags.contains(ConditionFlags::Z)),
+            ConditionBitPattern::Z => self.flags.contains(ConditionFlags::Z),
+            ConditionBitPattern::NC => !(self.flags.contains(ConditionFlags::CY)),
+            ConditionBitPattern::C => self.flags.contains(ConditionFlags::CY),
+            ConditionBitPattern::PO => !(self.flags.contains(ConditionFlags::P)),
+            ConditionBitPattern::PE => self.flags.contains(ConditionFlags::P),
+            ConditionBitPattern::P => !(self.flags.contains(ConditionFlags::S)),
+            ConditionBitPattern::M => self.flags.contains(ConditionFlags::S),
+        }
+    }
 }
 
 pub struct SpaceInvadersMemMap {
@@ -1275,16 +1288,7 @@ fn opcode_call(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     let second_byte = mem_map[state.prog_counter + 1];
     let third_byte = mem_map[state.prog_counter + 2];
     let condition: ConditionBitPattern = ((cur_instruction & 0b00_111_000) >> 3).into();
-    if (cur_instruction == 0b1100_1101)
-        || ((condition == ConditionBitPattern::NZ) && !(state.flags.contains(ConditionFlags::Z)))
-        || ((condition == ConditionBitPattern::Z) && (state.flags.contains(ConditionFlags::Z)))
-        || ((condition == ConditionBitPattern::NC) && !(state.flags.contains(ConditionFlags::CY)))
-        || ((condition == ConditionBitPattern::C) && (state.flags.contains(ConditionFlags::CY)))
-        || ((condition == ConditionBitPattern::PO) && !(state.flags.contains(ConditionFlags::P)))
-        || ((condition == ConditionBitPattern::PE) && (state.flags.contains(ConditionFlags::P)))
-        || ((condition == ConditionBitPattern::P) && !(state.flags.contains(ConditionFlags::S)))
-        || ((condition == ConditionBitPattern::M) && (state.flags.contains(ConditionFlags::S)))
-    {
+    if (cur_instruction == 0b1100_1101) || state.check_condition(condition) {
         state.push_address(mem_map, state.prog_counter);
         state.prog_counter = two_le_eights_to_one_sixteen(second_byte, third_byte);
     } else {
@@ -1321,18 +1325,10 @@ fn opcode_jmp(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     let cur_instruction = mem_map[state.prog_counter];
     let second_byte = mem_map[state.prog_counter + 1];
     let third_byte = mem_map[state.prog_counter + 2];
+    // The unconditional form is 0b011 in bit positions 2,1,0
     let j_type = ((cur_instruction & 0b00_000_111) >> 3);
     let condition: ConditionBitPattern = ((cur_instruction & 0b00_111_000) >> 3).into();
-    if j_type == 0b011
-        || ((condition == ConditionBitPattern::NZ) && !(state.flags.contains(ConditionFlags::Z)))
-        || ((condition == ConditionBitPattern::Z) && (state.flags.contains(ConditionFlags::Z)))
-        || ((condition == ConditionBitPattern::NC) && !(state.flags.contains(ConditionFlags::CY)))
-        || ((condition == ConditionBitPattern::C) && (state.flags.contains(ConditionFlags::CY)))
-        || ((condition == ConditionBitPattern::PO) && !(state.flags.contains(ConditionFlags::P)))
-        || ((condition == ConditionBitPattern::PE) && (state.flags.contains(ConditionFlags::P)))
-        || ((condition == ConditionBitPattern::P) && !(state.flags.contains(ConditionFlags::S)))
-        || ((condition == ConditionBitPattern::M) && (state.flags.contains(ConditionFlags::S)))
-    {
+    if j_type == 0b011 || state.check_condition(condition) {
         let address = two_le_eights_to_one_sixteen(second_byte, third_byte);
         state.prog_counter = address;
     } else {
@@ -1656,6 +1652,9 @@ fn opcode_mvi(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
 // able to be handled though since there aren't external deps, disk usage, network
 // usage, additional threads to contend, or even memory usage outside the initial allocations.
 
+// Todo: split the conditional logic portions, like condition type == condition flag bit set
+// into a separate function, especially for those giant boolean blobs in the branch instructions
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1691,6 +1690,66 @@ mod tests {
         si_mem.rom = test_rom;
         iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_address, test_state.prog_counter);
+    }
+
+    #[test]
+    fn jnz_step() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // jnz 0b11_000_010
+        test_rom[0] = 0b11_000_010;
+        // last address in the space
+        let test_address: u16 = (test_rom.len() - 1) as u16;
+        // putting something easy to recognize at the end
+        test_rom[test_address as usize] = 0xff;
+        // insert address in bytes 1 and 2 in little endian byte order
+        // we are explicitly truncating the bits by masking off as u8 here
+        // the high order bits and casting as u8
+        test_rom[1] = test_address as u8;
+        test_rom[2] = (test_address >> 8) as u8;
+        si_mem.rom = test_rom;
+
+        // assert not equal
+        test_state.flags.set(ConditionFlags::Z, true);
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_ne!(test_state.prog_counter, test_address);
+
+        // assert equal
+        test_state.prog_counter = 0;
+        test_state.flags.set(ConditionFlags::Z, false);
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.prog_counter, test_address);
+    }
+
+    #[test]
+    fn jz_step() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // jz 0b11_001_010
+        test_rom[0] = 0b11_001_010;
+        // last address in the space
+        let test_address: u16 = (test_rom.len() - 1) as u16;
+        // putting something easy to recognize at the end
+        test_rom[test_address as usize] = 0xff;
+        // insert address in bytes 1 and 2 in little endian byte order
+        // we are explicitly truncating the bits by masking off as u8 here
+        // the high order bits and casting as u8
+        test_rom[1] = test_address as u8;
+        test_rom[2] = (test_address >> 8) as u8;
+        si_mem.rom = test_rom;
+
+        // assert not equal
+        test_state.flags.set(ConditionFlags::Z, false);
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_ne!(test_state.prog_counter, test_address);
+
+        // assert equal
+        test_state.prog_counter = 0;
+        test_state.flags.set(ConditionFlags::Z, true);
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.prog_counter, test_address);
     }
 
     #[test]
