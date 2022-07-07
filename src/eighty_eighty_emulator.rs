@@ -1,3 +1,4 @@
+#![allow(clippy::unusual_byte_groupings)]
 use bitflags::bitflags;
 use std::convert::From;
 use std::{
