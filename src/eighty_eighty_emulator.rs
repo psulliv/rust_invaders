@@ -1137,8 +1137,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 3
         }
         0xe3 => {
-            panic!(" 	XTHL	1		L <-> (SP); H <-> (SP+1)");
-            // 1
+            opcode_xthl(state, mem_map);
         }
         0xe4 => {
             opcode_call(state, mem_map);
@@ -1732,6 +1731,25 @@ fn opcode_pop(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     state.prog_counter += 1;
 }
 
+/// XTHL (Exchange stack top with H and L)
+/// (L) ~((SP))
+/// (H) ~ ((SP) + 1)
+/// The content of the L register is exchanged with the
+/// content of the memory location whose address is
+/// specified by the content of register SP. The content
+/// of the H register is exchanged with the content of the
+/// memory location whose address is one more than the
+/// content of register SP
+fn opcode_xthl(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
+    let temp_l = state.reg_l;
+    state.reg_l = mem_map[state.stack_pointer];
+    mem_map[state.stack_pointer] = temp_l;
+
+    let temp_h = state.reg_h;
+    state.reg_h = mem_map[state.stack_pointer + 1];
+    mem_map[state.stack_pointer + 1] = temp_h;
+}
+
 // Todo: swap out register pair register condition flag and other bit twiddling
 // and masking with functions.
 
@@ -2044,7 +2062,7 @@ mod tests {
         test_state.reg_h = ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) >> 8) as u8;
         test_state.reg_l = ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) & 0x00ff) as u8;
         si_mem.rom = test_rom;
-        let address = iterate_processor_state(&mut test_state, &mut si_mem);
+        iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(
             si_mem[space_invaders_rom::SPACE_INVADERS_ROM.len() as u16],
             0xff
@@ -2062,7 +2080,7 @@ mod tests {
         test_state.reg_h = ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) >> 8) as u8;
         test_state.reg_l = ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) & 0x00ff) as u8;
         si_mem.rom = test_rom;
-        let address = iterate_processor_state(&mut test_state, &mut si_mem);
+        iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.prog_counter, 2);
     }
 
@@ -2071,7 +2089,7 @@ mod tests {
         let mut test_state = ProcessorState::new();
         let mut si_mem = SpaceInvadersMemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
-        let mut orig_stack_add = test_state.stack_pointer;
+        let orig_stack_add = test_state.stack_pointer;
         // 0b1100_1101 is unconditional call
         test_rom[0] = 0b1100_1101;
         let some_rando_address = 0x0020;
@@ -2089,7 +2107,7 @@ mod tests {
         let mut test_state = ProcessorState::new();
         let mut si_mem = SpaceInvadersMemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
-        let mut orig_stack_add = test_state.stack_pointer;
+        let orig_stack_add = test_state.stack_pointer;
         // 0b11_000_100 is cnz
         test_rom[0] = 0b11_000_100;
         let some_rando_address = 0x0020;
@@ -2116,7 +2134,7 @@ mod tests {
         let mut test_state = ProcessorState::new();
         let mut si_mem = SpaceInvadersMemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
-        let mut orig_stack_add = test_state.stack_pointer;
+        let orig_stack_add = test_state.stack_pointer;
         // 0b11_001_100 is cz
         test_rom[0] = 0b11_001_100;
         let some_rando_address = 0x0020;
@@ -2143,7 +2161,7 @@ mod tests {
         let mut test_state = ProcessorState::new();
         let mut si_mem = SpaceInvadersMemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
-        let mut orig_stack_add = test_state.stack_pointer;
+        let orig_stack_add = test_state.stack_pointer;
         // 0b11_010_100 is cnc
         test_rom[0] = 0b11_010_100;
         let some_rando_address = 0x0020;
@@ -2170,7 +2188,7 @@ mod tests {
         let mut test_state = ProcessorState::new();
         let mut si_mem = SpaceInvadersMemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
-        let mut orig_stack_add = test_state.stack_pointer;
+        let orig_stack_add = test_state.stack_pointer;
         // 0b11_011_100 is cc
         test_rom[0] = 0b11_011_100;
         let some_rando_address = 0x0020;
@@ -2196,7 +2214,7 @@ mod tests {
         let mut test_state = ProcessorState::new();
         let mut si_mem = SpaceInvadersMemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
-        let mut orig_stack_add = test_state.stack_pointer;
+        let orig_stack_add = test_state.stack_pointer;
         // 0b11_100_100 is cpo
         test_rom[0] = 0b11_100_100;
         let some_rando_address = 0x0020;
@@ -2222,7 +2240,7 @@ mod tests {
         let mut test_state = ProcessorState::new();
         let mut si_mem = SpaceInvadersMemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
-        let mut orig_stack_add = test_state.stack_pointer;
+        let orig_stack_add = test_state.stack_pointer;
         // 0b11_101_100 is cpo
         test_rom[0] = 0b11_101_100;
         let some_rando_address = 0x0020;
@@ -2248,7 +2266,7 @@ mod tests {
         let mut test_state = ProcessorState::new();
         let mut si_mem = SpaceInvadersMemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
-        let mut orig_stack_add = test_state.stack_pointer;
+        let orig_stack_add = test_state.stack_pointer;
         // 0b11_110_100 is cp
         test_rom[0] = 0b11_110_100;
         let some_rando_address = 0x0020;
@@ -2274,7 +2292,7 @@ mod tests {
         let mut test_state = ProcessorState::new();
         let mut si_mem = SpaceInvadersMemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
-        let mut orig_stack_add = test_state.stack_pointer;
+        let orig_stack_add = test_state.stack_pointer;
         // 0b11_111_100 is cp
         test_rom[0] = 0b11_111_100;
         let some_rando_address = 0x0020;
@@ -2574,5 +2592,22 @@ mod tests {
         assert_eq!(test_state.reg_a, 0xfe);
         assert_eq!(test_state.flags, test_flags);
         assert_eq!(original_stack_pointer, test_state.stack_pointer);
+    }
+
+    #[test]
+    fn xthl() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+
+        test_rom[0] = 0b11_100_011;
+        si_mem.rom = test_rom;
+        test_state.reg_h = 0xde;
+        test_state.reg_l = 0xad;
+        test_state.push_address(&mut si_mem, 0xbeef);
+
+        assert_ne!(test_state.get_rp(RPairBitPattern::HL), 0xbeef);
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.get_rp(RPairBitPattern::HL), 0xbeef);
     }
 }
