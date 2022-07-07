@@ -451,8 +451,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             opcode_lxi(state, mem_map);
         }
         0x32 => {
-            panic!(" 	STA adr	3		(adr) <- A");
-            // 3
+            opcode_sta(state, mem_map);
         }
         0x33 => {
             opcode_inx(state, mem_map);
@@ -1394,6 +1393,18 @@ fn opcode_lda(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     let second_byte = mem_map[state.prog_counter + 1];
     let third_byte = mem_map[state.prog_counter + 2];
     state.reg_a = mem_map[two_le_eights_to_one_sixteen(second_byte, third_byte)];
+    state.prog_counter += 3;
+}
+
+/// STA addr (Store Accumulator direct)
+/// ((byte 3)(byte 2)) ~ (A)
+/// The content of the accumulator is moved to the
+/// memory location whose address is specified in byte
+/// 2 and byte 3 of the instruction.
+fn opcode_sta(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
+    let second_byte = mem_map[state.prog_counter + 1];
+    let third_byte = mem_map[state.prog_counter + 2];
+    mem_map[two_le_eights_to_one_sixteen(second_byte, third_byte)] = state.reg_a;
     state.prog_counter += 3;
 }
 
@@ -2668,5 +2679,24 @@ mod tests {
         assert_ne!(test_state.reg_a, 0xfe);
         iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.reg_a, 0xfe);
+    }
+
+    #[test]
+    fn sta() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+
+        test_rom[0] = 0b00_110_010;
+        let some_address: u16 = 0x1337;
+
+        test_rom[1] = some_address as u8;
+        test_rom[2] = (some_address >> 8) as u8;
+        si_mem.rom = test_rom;
+        test_state.reg_a = 0xfe;
+
+        assert_ne!(si_mem[some_address], 0xfe);
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(si_mem[some_address], 0xfe);
     }
 }
