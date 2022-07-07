@@ -1155,8 +1155,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             opcode_ret(state, mem_map);
         }
         0xe9 => {
-            panic!(" 	PCHL	1		PC.hi <- H; PC.lo <- L");
-            // 1
+            opcode_pchl(state, mem_map);
         }
         0xea => {
             opcode_jmp(state, mem_map);
@@ -1644,6 +1643,16 @@ fn opcode_rst(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     let rst_address = (cur_instruction & 0b00_111_000) as u16;
     state.push_address(mem_map, state.prog_counter);
     state.prog_counter = rst_address;
+}
+
+/// PCHL (Jump Hand l indirect - move Hand L to PC)
+/// (PCH) ~ (H)
+/// (PCl) ~ (l)
+/// The content of register H is moved to the high-order
+/// eight bits of register PC. The content of register l is
+/// moved to the low-order eight bits of register PC.
+fn opcode_pchl(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
+    state.prog_counter = state.get_rp(RPairBitPattern::HL);
 }
 
 // Todo: remove extra match branches in the iterate state function
@@ -2380,5 +2389,20 @@ mod tests {
         assert_ne!(0b1000, test_state.prog_counter);
         iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(0b1000, test_state.prog_counter);
+    }
+
+    #[test]
+    fn pchl() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+
+        // RST to location 001, address 1000;
+        test_rom[0] = 0b11_101_001;
+        si_mem.rom = test_rom;
+        test_state.set_rp(0x0020, RPairBitPattern::HL);
+        assert_ne!(0x0020, test_state.prog_counter);
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(0x0020, test_state.prog_counter);
     }
 }
