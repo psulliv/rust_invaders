@@ -256,6 +256,10 @@ fn two_le_eights_to_one_sixteen(first_byte: u8, second_byte: u8) -> u16 {
     (second_byte as u16) << 8 | first_byte as u16
 }
 
+fn get_register_pair_bit_pattern(cur_instruction: u8) -> RPairBitPattern {
+    ((cur_instruction & 0b00_11_0000) >> 4).into()
+}
+
 /// match statement for operation decoding
 pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     // get the next opcode at the current program counter
@@ -1283,7 +1287,8 @@ fn opcode_nop(state: &mut ProcessorState) {
 /// The content of the register pair rp is incremented by
 /// one. Note: No condition flags are affected
 fn opcode_inx(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
-    let rp_bits: RPairBitPattern = ((mem_map[state.prog_counter] & 0b00_11_0000) >> 4).into();
+    let cur_instruction = mem_map[state.prog_counter];
+    let rp_bits = get_register_pair_bit_pattern(cur_instruction);
     let rp_16 = state.get_rp(rp_bits);
     state.set_rp(rp_16 + 1, rp_bits);
     state.prog_counter += 1;
@@ -1318,7 +1323,7 @@ fn opcode_jmp(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
 /// (registers D and E) may be specified.
 fn opcode_ldax(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     let cur_instruction = mem_map[state.prog_counter];
-    let rp_bits: RPairBitPattern = ((cur_instruction & 0b00_11_0000) >> 4).into();
+    let rp_bits = get_register_pair_bit_pattern(cur_instruction);
     match rp_bits {
         RPairBitPattern::BC => {
             // register pair B-C
@@ -1345,7 +1350,7 @@ fn opcode_ldax(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
 /// (registers D and E) may be specified.
 fn opcode_stax(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     let cur_instruction = mem_map[state.prog_counter];
-    let rp_bits: RPairBitPattern = ((cur_instruction & 0b00_11_0000) >> 4).into();
+    let rp_bits = get_register_pair_bit_pattern(cur_instruction);
     match rp_bits {
         RPairBitPattern::BC => {
             // register pair B-C
@@ -1396,7 +1401,7 @@ fn opcode_lxi(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     let third_byte = mem_map[state.prog_counter + 2];
     // Masking and shifting so that we can use this as a match that looks similar
     // to the RP legend in the book.
-    let rp_bits: RPairBitPattern = ((cur_instruction & 0b0011_0000) >> 4).into();
+    let rp_bits = get_register_pair_bit_pattern(cur_instruction);
     state.prog_counter += 3;
     match rp_bits {
         RPairBitPattern::BC => {
@@ -1755,7 +1760,7 @@ fn opcode_pchl(state: &mut ProcessorState, _mem_map: &mut SpaceInvadersMemMap) {
 /// rp = SP may not be specified ..
 fn opcode_push(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     let cur_instruction = mem_map[state.prog_counter];
-    let rpair: RPairBitPattern = ((cur_instruction & 0b00_11_0000) >> 4).into();
+    let rpair = get_register_pair_bit_pattern(cur_instruction);
     match rpair {
         RPairBitPattern::BC => {
             let this_data = state.get_rp(rpair);
@@ -1795,7 +1800,7 @@ fn opcode_push(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
 /// rp =SP may not be specified
 fn opcode_pop(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     let cur_instruction = mem_map[state.prog_counter];
-    let rpair: RPairBitPattern = ((cur_instruction & 0b00_11_0000) >> 4).into();
+    let rpair = get_register_pair_bit_pattern(cur_instruction);
     match rpair {
         RPairBitPattern::BC => {
             let this_data = state.pop_address(mem_map);
