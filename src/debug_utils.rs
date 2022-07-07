@@ -1,1031 +1,777 @@
 #[allow(unused)]
-pub fn debug_print_op_code(opcode: u8) -> usize {
+use web_sys::console;
+
+pub fn debug_print_op_code(opcode: u8) -> String {
     //! Print out the current opcode and return the number of bytes it uses including itself
     //! Parsed off of http://www.emulator101.com/reference/8080-by-opcode.html
     match opcode {
         0x00 => {
-            println!(" 	NOP	1		");
-            1
+            format!(" 	NOP	1		")
         }
         0x01 => {
-            println!(" 	LXI B,D16	3		B <- byte 3, C <- byte 2");
-            3
+            format!(" 	LXI B,D16	3		B <- byte 3, C <- byte 2")
         }
         0x02 => {
-            println!(" 	STAX B	1		(BC) <- A");
-            1
+            format!(" 	STAX B	1		(BC) <- A")
         }
         0x03 => {
-            println!(" 	INX B	1		BC <- BC+1");
-            1
+            format!(" 	INX B	1		BC <- BC+1")
         }
         0x04 => {
-            println!(" 	INR B	1	Z, S, P, AC	B <- B+1");
-            1
+            format!(" 	INR B	1	Z, S, P, AC	B <- B+1")
         }
         0x05 => {
-            println!(" 	DCR B	1	Z, S, P, AC	B <- B-1");
-            1
+            format!(" 	DCR B	1	Z, S, P, AC	B <- B-1")
         }
         0x06 => {
-            println!(" 	MVI B, D8	2		B <- byte 2");
-            2
+            format!(" 	MVI B, D8	2		B <- byte 2")
         }
         0x07 => {
-            println!(" 	RLC	1	CY	A = A << 1; bit 0 = prev bit 7; CY = prev bit 7");
-            1
+            format!(" 	RLC	1	CY	A = A << 1; bit 0 = prev bit 7; CY = prev bit 7")
         }
         0x08 => {
-            println!(" 	-			");
-            1
+            format!(" 	-			")
         }
         0x09 => {
-            println!(" 	DAD B	1	CY	HL = HL + BC");
-            1
+            format!(" 	DAD B	1	CY	HL = HL + BC")
         }
         0x0a => {
-            println!(" 	LDAX B	1		A <- (BC)");
-            1
+            format!(" 	LDAX B	1		A <- (BC)")
         }
         0x0b => {
-            println!(" 	DCX B	1		BC = BC-1");
-            1
+            format!(" 	DCX B	1		BC = BC-1")
         }
         0x0c => {
-            println!(" 	INR C	1	Z, S, P, AC	C <- C+1");
-            1
+            format!(" 	INR C	1	Z, S, P, AC	C <- C+1")
         }
         0x0d => {
-            println!(" 	DCR C	1	Z, S, P, AC	C <-C-1");
-            1
+            format!(" 	DCR C	1	Z, S, P, AC	C <-C-1")
         }
         0x0e => {
-            println!(" 	MVI C,D8	2		C <- byte 2");
-            2
+            format!(" 	MVI C,D8	2		C <- byte 2")
         }
         0x0f => {
-            println!(" 	RRC	1	CY	A = A >> 1; bit 7 = prev bit 0; CY = prev bit 0");
-            1
+            format!(" 	RRC	1	CY	A = A >> 1; bit 7 = prev bit 0; CY = prev bit 0")
         }
         0x10 => {
-            println!(" 	-			");
-            1
+            format!(" 	-			")
         }
         0x11 => {
-            println!(" 	LXI D,D16	3		D <- byte 3, E <- byte 2");
-            3
+            format!(" 	LXI D,D16	3		D <- byte 3, E <- byte 2")
         }
         0x12 => {
-            println!(" 	STAX D	1		(DE) <- A");
-            1
+            format!(" 	STAX D	1		(DE) <- A")
         }
         0x13 => {
-            println!(" 	INX D	1		DE <- DE + 1");
-            1
+            format!(" 	INX D	1		DE <- DE + 1")
         }
         0x14 => {
-            println!(" 	INR D	1	Z, S, P, AC	D <- D+1");
-            1
+            format!(" 	INR D	1	Z, S, P, AC	D <- D+1")
         }
         0x15 => {
-            println!(" 	DCR D	1	Z, S, P, AC	D <- D-1");
-            1
+            format!(" 	DCR D	1	Z, S, P, AC	D <- D-1")
         }
         0x16 => {
-            println!(" 	MVI D, D8	2		D <- byte 2");
-            2
+            format!(" 	MVI D, D8	2		D <- byte 2")
         }
         0x17 => {
-            println!(" 	RAL	1	CY	A = A << 1; bit 0 = prev CY; CY = prev bit 7");
-            1
+            format!(" 	RAL	1	CY	A = A << 1; bit 0 = prev CY; CY = prev bit 7")
         }
         0x18 => {
-            println!(" 	-			");
-            1
+            format!(" 	-			")
         }
         0x19 => {
-            println!(" 	DAD D	1	CY	HL = HL + DE");
-            1
+            format!(" 	DAD D	1	CY	HL = HL + DE")
         }
         0x1a => {
-            println!(" 	LDAX D	1		A <- (DE)");
-            1
+            format!(" 	LDAX D	1		A <- (DE)")
         }
         0x1b => {
-            println!(" 	DCX D	1		DE = DE-1");
-            1
+            format!(" 	DCX D	1		DE = DE-1")
         }
         0x1c => {
-            println!(" 	INR E	1	Z, S, P, AC	E <-E+1");
-            1
+            format!(" 	INR E	1	Z, S, P, AC	E <-E+1")
         }
         0x1d => {
-            println!(" 	DCR E	1	Z, S, P, AC	E <- E-1");
-            1
+            format!(" 	DCR E	1	Z, S, P, AC	E <- E-1")
         }
         0x1e => {
-            println!(" 	MVI E,D8	2		E <- byte 2");
-            2
+            format!(" 	MVI E,D8	2		E <- byte 2")
         }
         0x1f => {
-            println!(" 	RAR	1	CY	A = A >> 1; bit 7 = prev bit 7; CY = prev bit 0");
-            1
+            format!(" 	RAR	1	CY	A = A >> 1; bit 7 = prev bit 7; CY = prev bit 0")
         }
         0x20 => {
-            println!(" 	-			");
-            1
+            format!(" 	-			")
         }
         0x21 => {
-            println!(" 	LXI H,D16	3		H <- byte 3, L <- byte 2");
-            3
+            format!(" 	LXI H,D16	3		H <- byte 3, L <- byte 2")
         }
         0x22 => {
-            println!(" 	SHLD adr	3		(adr) <-L; (adr+1)<-H");
-            3
+            format!(" 	SHLD adr	3		(adr) <-L; (adr+1)<-H")
         }
         0x23 => {
-            println!(" 	INX H	1		HL <- HL + 1");
-            1
+            format!(" 	INX H	1		HL <- HL + 1")
         }
         0x24 => {
-            println!(" 	INR H	1	Z, S, P, AC	H <- H+1");
-            1
+            format!(" 	INR H	1	Z, S, P, AC	H <- H+1")
         }
         0x25 => {
-            println!(" 	DCR H	1	Z, S, P, AC	H <- H-1");
-            1
+            format!(" 	DCR H	1	Z, S, P, AC	H <- H-1")
         }
         0x26 => {
-            println!(" 	MVI H,D8	2		H <- byte 2");
-            1
+            format!(" 	MVI H,D8	2		H <- byte 2")
         }
         0x27 => {
-            println!(" 	DAA	1		special");
-            1
+            format!(" 	DAA	1		special")
         }
         0x28 => {
-            println!(" 	-			");
-            1
+            format!(" 	-			")
         }
         0x29 => {
-            println!(" 	DAD H	1	CY	HL = HL + HI");
-            1
+            format!(" 	DAD H	1	CY	HL = HL + HI")
         }
         0x2a => {
-            println!(" 	LHLD adr	3		L <- (adr); H<-(adr+1)");
-            3
+            format!(" 	LHLD adr	3		L <- (adr); H<-(adr+1)")
         }
         0x2b => {
-            println!(" 	DCX H	1		HL = HL-1");
-            1
+            format!(" 	DCX H	1		HL = HL-1")
         }
         0x2c => {
-            println!(" 	INR L	1	Z, S, P, AC	L <- L+1");
-            1
+            format!(" 	INR L	1	Z, S, P, AC	L <- L+1")
         }
         0x2d => {
-            println!(" 	DCR L	1	Z, S, P, AC	L <- L-1");
-            1
+            format!(" 	DCR L	1	Z, S, P, AC	L <- L-1")
         }
         0x2e => {
-            println!(" 	MVI L, D8	2		L <- byte 2");
-            2
+            format!(" 	MVI L, D8	2		L <- byte 2")
         }
         0x2f => {
-            println!(" 	CMA	1		A <- !A");
-            1
+            format!(" 	CMA	1		A <- !A")
         }
         0x30 => {
-            println!(" 	-			");
-            1
+            format!(" 	-			")
         }
         0x31 => {
-            println!(" 	LXI SP, D16	3		SP.hi <- byte 3, SP.lo <- byte 2");
-            3
+            format!(" 	LXI SP, D16	3		SP.hi <- byte 3, SP.lo <- byte 2")
         }
         0x32 => {
-            println!(" 	STA adr	3		(adr) <- A");
-            3
+            format!(" 	STA adr	3		(adr) <- A")
         }
         0x33 => {
-            println!(" 	INX SP	1		SP = SP + 1");
-            1
+            format!(" 	INX SP	1		SP = SP + 1")
         }
         0x34 => {
-            println!(" 	INR M	1	Z, S, P, AC	(HL) <- (HL)+1");
-            1
+            format!(" 	INR M	1	Z, S, P, AC	(HL) <- (HL)+1")
         }
         0x35 => {
-            println!(" 	DCR M	1	Z, S, P, AC	(HL) <- (HL)-1");
-            1
+            format!(" 	DCR M	1	Z, S, P, AC	(HL) <- (HL)-1")
         }
         0x36 => {
-            println!(" 	MVI M,D8	2		(HL) <- byte 2");
-            2
+            format!(" 	MVI M,D8	2		(HL) <- byte 2")
         }
         0x37 => {
-            println!(" 	STC	1	CY	CY = 1");
-            1
+            format!(" 	STC	1	CY	CY = 1")
         }
         0x38 => {
-            println!(" 	-			");
-            1
+            format!(" 	-			")
         }
         0x39 => {
-            println!(" 	DAD SP	1	CY	HL = HL + SP");
-            1
+            format!(" 	DAD SP	1	CY	HL = HL + SP")
         }
         0x3a => {
-            println!(" 	LDA adr	3		A <- (adr)");
-            3
+            format!(" 	LDA adr	3		A <- (adr)")
         }
         0x3b => {
-            println!(" 	DCX SP	1		SP = SP-1");
-            1
+            format!(" 	DCX SP	1		SP = SP-1")
         }
         0x3c => {
-            println!(" 	INR A	1	Z, S, P, AC	A <- A+1");
-            1
+            format!(" 	INR A	1	Z, S, P, AC	A <- A+1")
         }
         0x3d => {
-            println!(" 	DCR A	1	Z, S, P, AC	A <- A-1");
-            1
+            format!(" 	DCR A	1	Z, S, P, AC	A <- A-1")
         }
         0x3e => {
-            println!(" 	MVI A,D8	2		A <- byte 2");
-            2
+            format!(" 	MVI A,D8	2		A <- byte 2")
         }
         0x3f => {
-            println!(" 	CMC	1	CY	CY=!CY");
-            1
+            format!(" 	CMC	1	CY	CY=!CY")
         }
         0x40 => {
-            println!(" 	MOV B,B	1		B <- B");
-            1
+            format!(" 	MOV B,B	1		B <- B")
         }
         0x41 => {
-            println!(" 	MOV B,C	1		B <- C");
-            1
+            format!(" 	MOV B,C	1		B <- C")
         }
         0x42 => {
-            println!(" 	MOV B,D	1		B <- D");
-            1
+            format!(" 	MOV B,D	1		B <- D")
         }
         0x43 => {
-            println!(" 	MOV B,E	1		B <- E");
-            1
+            format!(" 	MOV B,E	1		B <- E")
         }
         0x44 => {
-            println!(" 	MOV B,H	1		B <- H");
-            1
+            format!(" 	MOV B,H	1		B <- H")
         }
         0x45 => {
-            println!(" 	MOV B,L	1		B <- L");
-            1
+            format!(" 	MOV B,L	1		B <- L")
         }
         0x46 => {
-            println!(" 	MOV B,M	1		B <- (HL)");
-            1
+            format!(" 	MOV B,M	1		B <- (HL)")
         }
         0x47 => {
-            println!(" 	MOV B,A	1		B <- A");
-            1
+            format!(" 	MOV B,A	1		B <- A")
         }
         0x48 => {
-            println!(" 	MOV C,B	1		C <- B");
-            1
+            format!(" 	MOV C,B	1		C <- B")
         }
         0x49 => {
-            println!(" 	MOV C,C	1		C <- C");
-            1
+            format!(" 	MOV C,C	1		C <- C")
         }
         0x4a => {
-            println!(" 	MOV C,D	1		C <- D");
-            1
+            format!(" 	MOV C,D	1		C <- D")
         }
         0x4b => {
-            println!(" 	MOV C,E	1		C <- E");
-            1
+            format!(" 	MOV C,E	1		C <- E")
         }
         0x4c => {
-            println!(" 	MOV C,H	1		C <- H");
-            1
+            format!(" 	MOV C,H	1		C <- H")
         }
         0x4d => {
-            println!(" 	MOV C,L	1		C <- L");
-            1
+            format!(" 	MOV C,L	1		C <- L")
         }
         0x4e => {
-            println!(" 	MOV C,M	1		C <- (HL)");
-            1
+            format!(" 	MOV C,M	1		C <- (HL)")
         }
         0x4f => {
-            println!(" 	MOV C,A	1		C <- A");
-            1
+            format!(" 	MOV C,A	1		C <- A")
         }
         0x50 => {
-            println!(" 	MOV D,B	1		D <- B");
-            1
+            format!(" 	MOV D,B	1		D <- B")
         }
         0x51 => {
-            println!(" 	MOV D,C	1		D <- C");
-            1
+            format!(" 	MOV D,C	1		D <- C")
         }
         0x52 => {
-            println!(" 	MOV D,D	1		D <- D");
-            1
+            format!(" 	MOV D,D	1		D <- D")
         }
         0x53 => {
-            println!(" 	MOV D,E	1		D <- E");
-            1
+            format!(" 	MOV D,E	1		D <- E")
         }
         0x54 => {
-            println!(" 	MOV D,H	1		D <- H");
-            1
+            format!(" 	MOV D,H	1		D <- H")
         }
         0x55 => {
-            println!(" 	MOV D,L	1		D <- L");
-            1
+            format!(" 	MOV D,L	1		D <- L")
         }
         0x56 => {
-            println!(" 	MOV D,M	1		D <- (HL)");
-            1
+            format!(" 	MOV D,M	1		D <- (HL)")
         }
         0x57 => {
-            println!(" 	MOV D,A	1		D <- A");
-            1
+            format!(" 	MOV D,A	1		D <- A")
         }
         0x58 => {
-            println!(" 	MOV E,B	1		E <- B");
-            1
+            format!(" 	MOV E,B	1		E <- B")
         }
         0x59 => {
-            println!(" 	MOV E,C	1		E <- C");
-            1
+            format!(" 	MOV E,C	1		E <- C")
         }
         0x5a => {
-            println!(" 	MOV E,D	1		E <- D");
-            1
+            format!(" 	MOV E,D	1		E <- D")
         }
         0x5b => {
-            println!(" 	MOV E,E	1		E <- E");
-            1
+            format!(" 	MOV E,E	1		E <- E")
         }
         0x5c => {
-            println!(" 	MOV E,H	1		E <- H");
-            1
+            format!(" 	MOV E,H	1		E <- H")
         }
         0x5d => {
-            println!(" 	MOV E,L	1		E <- L");
-            1
+            format!(" 	MOV E,L	1		E <- L")
         }
         0x5e => {
-            println!(" 	MOV E,M	1		E <- (HL)");
-            1
+            format!(" 	MOV E,M	1		E <- (HL)")
         }
         0x5f => {
-            println!(" 	MOV E,A	1		E <- A");
-            1
+            format!(" 	MOV E,A	1		E <- A")
         }
         0x60 => {
-            println!(" 	MOV H,B	1		H <- B");
-            1
+            format!(" 	MOV H,B	1		H <- B")
         }
         0x61 => {
-            println!(" 	MOV H,C	1		H <- C");
-            1
+            format!(" 	MOV H,C	1		H <- C")
         }
         0x62 => {
-            println!(" 	MOV H,D	1		H <- D");
-            1
+            format!(" 	MOV H,D	1		H <- D")
         }
         0x63 => {
-            println!(" 	MOV H,E	1		H <- E");
-            1
+            format!(" 	MOV H,E	1		H <- E")
         }
         0x64 => {
-            println!(" 	MOV H,H	1		H <- H");
-            1
+            format!(" 	MOV H,H	1		H <- H")
         }
         0x65 => {
-            println!(" 	MOV H,L	1		H <- L");
-            1
+            format!(" 	MOV H,L	1		H <- L")
         }
         0x66 => {
-            println!(" 	MOV H,M	1		H <- (HL)");
-            1
+            format!(" 	MOV H,M	1		H <- (HL)")
         }
         0x67 => {
-            println!(" 	MOV H,A	1		H <- A");
-            1
+            format!(" 	MOV H,A	1		H <- A")
         }
         0x68 => {
-            println!(" 	MOV L,B	1		L <- B");
-            1
+            format!(" 	MOV L,B	1		L <- B")
         }
         0x69 => {
-            println!(" 	MOV L,C	1		L <- C");
-            1
+            format!(" 	MOV L,C	1		L <- C")
         }
         0x6a => {
-            println!(" 	MOV L,D	1		L <- D");
-            1
+            format!(" 	MOV L,D	1		L <- D")
         }
         0x6b => {
-            println!(" 	MOV L,E	1		L <- E");
-            1
+            format!(" 	MOV L,E	1		L <- E")
         }
         0x6c => {
-            println!(" 	MOV L,H	1		L <- H");
-            1
+            format!(" 	MOV L,H	1		L <- H")
         }
         0x6d => {
-            println!(" 	MOV L,L	1		L <- L");
-            1
+            format!(" 	MOV L,L	1		L <- L")
         }
         0x6e => {
-            println!(" 	MOV L,M	1		L <- (HL)");
-            1
+            format!(" 	MOV L,M	1		L <- (HL)")
         }
         0x6f => {
-            println!(" 	MOV L,A	1		L <- A");
-            1
+            format!(" 	MOV L,A	1		L <- A")
         }
         0x70 => {
-            println!(" 	MOV M,B	1		(HL) <- B");
-            1
+            format!(" 	MOV M,B	1		(HL) <- B")
         }
         0x71 => {
-            println!(" 	MOV M,C	1		(HL) <- C");
-            1
+            format!(" 	MOV M,C	1		(HL) <- C")
         }
         0x72 => {
-            println!(" 	MOV M,D	1		(HL) <- D");
-            1
+            format!(" 	MOV M,D	1		(HL) <- D")
         }
         0x73 => {
-            println!(" 	MOV M,E	1		(HL) <- E");
-            1
+            format!(" 	MOV M,E	1		(HL) <- E")
         }
         0x74 => {
-            println!(" 	MOV M,H	1		(HL) <- H");
-            1
+            format!(" 	MOV M,H	1		(HL) <- H")
         }
         0x75 => {
-            println!(" 	MOV M,L	1		(HL) <- L");
-            1
+            format!(" 	MOV M,L	1		(HL) <- L")
         }
         0x76 => {
-            println!(" 	HLT	1		special");
-            1
+            format!(" 	HLT	1		special")
         }
         0x77 => {
-            println!(" 	MOV M,A	1		(HL) <- A");
-            1
+            format!(" 	MOV M,A	1		(HL) <- A")
         }
         0x78 => {
-            println!(" 	MOV A,B	1		A <- B");
-            1
+            format!(" 	MOV A,B	1		A <- B")
         }
         0x79 => {
-            println!(" 	MOV A,C	1		A <- C");
-            1
+            format!(" 	MOV A,C	1		A <- C")
         }
         0x7a => {
-            println!(" 	MOV A,D	1		A <- D");
-            1
+            format!(" 	MOV A,D	1		A <- D")
         }
         0x7b => {
-            println!(" 	MOV A,E	1		A <- E");
-            1
+            format!(" 	MOV A,E	1		A <- E")
         }
         0x7c => {
-            println!(" 	MOV A,H	1		A <- H");
-            1
+            format!(" 	MOV A,H	1		A <- H")
         }
         0x7d => {
-            println!(" 	MOV A,L	1		A <- L");
-            1
+            format!(" 	MOV A,L	1		A <- L")
         }
         0x7e => {
-            println!(" 	MOV A,M	1		A <- (HL)");
-            1
+            format!(" 	MOV A,M	1		A <- (HL)")
         }
         0x7f => {
-            println!(" 	MOV A,A	1		A <- A");
-            1
+            format!(" 	MOV A,A	1		A <- A")
         }
         0x80 => {
-            println!(" 	ADD B	1	Z, S, P, CY, AC	A <- A + B");
-            1
+            format!(" 	ADD B	1	Z, S, P, CY, AC	A <- A + B")
         }
         0x81 => {
-            println!(" 	ADD C	1	Z, S, P, CY, AC	A <- A + C");
-            1
+            format!(" 	ADD C	1	Z, S, P, CY, AC	A <- A + C")
         }
         0x82 => {
-            println!(" 	ADD D	1	Z, S, P, CY, AC	A <- A + D");
-            1
+            format!(" 	ADD D	1	Z, S, P, CY, AC	A <- A + D")
         }
         0x83 => {
-            println!(" 	ADD E	1	Z, S, P, CY, AC	A <- A + E");
-            1
+            format!(" 	ADD E	1	Z, S, P, CY, AC	A <- A + E")
         }
         0x84 => {
-            println!(" 	ADD H	1	Z, S, P, CY, AC	A <- A + H");
-            1
+            format!(" 	ADD H	1	Z, S, P, CY, AC	A <- A + H")
         }
         0x85 => {
-            println!(" 	ADD L	1	Z, S, P, CY, AC	A <- A + L");
-            1
+            format!(" 	ADD L	1	Z, S, P, CY, AC	A <- A + L")
         }
         0x86 => {
-            println!(" 	ADD M	1	Z, S, P, CY, AC	A <- A + (HL)");
-            1
+            format!(" 	ADD M	1	Z, S, P, CY, AC	A <- A + (HL)")
         }
         0x87 => {
-            println!(" 	ADD A	1	Z, S, P, CY, AC	A <- A + A");
-            1
+            format!(" 	ADD A	1	Z, S, P, CY, AC	A <- A + A")
         }
         0x88 => {
-            println!(" 	ADC B	1	Z, S, P, CY, AC	A <- A + B + CY");
-            1
+            format!(" 	ADC B	1	Z, S, P, CY, AC	A <- A + B + CY")
         }
         0x89 => {
-            println!(" 	ADC C	1	Z, S, P, CY, AC	A <- A + C + CY");
-            1
+            format!(" 	ADC C	1	Z, S, P, CY, AC	A <- A + C + CY")
         }
         0x8a => {
-            println!(" 	ADC D	1	Z, S, P, CY, AC	A <- A + D + CY");
-            1
+            format!(" 	ADC D	1	Z, S, P, CY, AC	A <- A + D + CY")
         }
         0x8b => {
-            println!(" 	ADC E	1	Z, S, P, CY, AC	A <- A + E + CY");
-            1
+            format!(" 	ADC E	1	Z, S, P, CY, AC	A <- A + E + CY")
         }
         0x8c => {
-            println!(" 	ADC H	1	Z, S, P, CY, AC	A <- A + H + CY");
-            1
+            format!(" 	ADC H	1	Z, S, P, CY, AC	A <- A + H + CY")
         }
         0x8d => {
-            println!(" 	ADC L	1	Z, S, P, CY, AC	A <- A + L + CY");
-            1
+            format!(" 	ADC L	1	Z, S, P, CY, AC	A <- A + L + CY")
         }
         0x8e => {
-            println!(" 	ADC M	1	Z, S, P, CY, AC	A <- A + (HL) + CY");
-            1
+            format!(" 	ADC M	1	Z, S, P, CY, AC	A <- A + (HL) + CY")
         }
         0x8f => {
-            println!(" 	ADC A	1	Z, S, P, CY, AC	A <- A + A + CY");
-            1
+            format!(" 	ADC A	1	Z, S, P, CY, AC	A <- A + A + CY")
         }
         0x90 => {
-            println!(" 	SUB B	1	Z, S, P, CY, AC	A <- A - B");
-            1
+            format!(" 	SUB B	1	Z, S, P, CY, AC	A <- A - B")
         }
         0x91 => {
-            println!(" 	SUB C	1	Z, S, P, CY, AC	A <- A - C");
-            1
+            format!(" 	SUB C	1	Z, S, P, CY, AC	A <- A - C")
         }
         0x92 => {
-            println!(" 	SUB D	1	Z, S, P, CY, AC	A <- A + D");
-            1
+            format!(" 	SUB D	1	Z, S, P, CY, AC	A <- A + D")
         }
         0x93 => {
-            println!(" 	SUB E	1	Z, S, P, CY, AC	A <- A - E");
-            1
+            format!(" 	SUB E	1	Z, S, P, CY, AC	A <- A - E")
         }
         0x94 => {
-            println!(" 	SUB H	1	Z, S, P, CY, AC	A <- A + H");
-            1
+            format!(" 	SUB H	1	Z, S, P, CY, AC	A <- A + H")
         }
         0x95 => {
-            println!(" 	SUB L	1	Z, S, P, CY, AC	A <- A - L");
-            1
+            format!(" 	SUB L	1	Z, S, P, CY, AC	A <- A - L")
         }
         0x96 => {
-            println!(" 	SUB M	1	Z, S, P, CY, AC	A <- A + (HL)");
-            1
+            format!(" 	SUB M	1	Z, S, P, CY, AC	A <- A + (HL)")
         }
         0x97 => {
-            println!(" 	SUB A	1	Z, S, P, CY, AC	A <- A - A");
-            1
+            format!(" 	SUB A	1	Z, S, P, CY, AC	A <- A - A")
         }
         0x98 => {
-            println!(" 	SBB B	1	Z, S, P, CY, AC	A <- A - B - CY");
-            1
+            format!(" 	SBB B	1	Z, S, P, CY, AC	A <- A - B - CY")
         }
         0x99 => {
-            println!(" 	SBB C	1	Z, S, P, CY, AC	A <- A - C - CY");
-            1
+            format!(" 	SBB C	1	Z, S, P, CY, AC	A <- A - C - CY")
         }
         0x9a => {
-            println!(" 	SBB D	1	Z, S, P, CY, AC	A <- A - D - CY");
-            1
+            format!(" 	SBB D	1	Z, S, P, CY, AC	A <- A - D - CY")
         }
         0x9b => {
-            println!(" 	SBB E	1	Z, S, P, CY, AC	A <- A - E - CY");
-            1
+            format!(" 	SBB E	1	Z, S, P, CY, AC	A <- A - E - CY")
         }
         0x9c => {
-            println!(" 	SBB H	1	Z, S, P, CY, AC	A <- A - H - CY");
-            1
+            format!(" 	SBB H	1	Z, S, P, CY, AC	A <- A - H - CY")
         }
         0x9d => {
-            println!(" 	SBB L	1	Z, S, P, CY, AC	A <- A - L - CY");
-            1
+            format!(" 	SBB L	1	Z, S, P, CY, AC	A <- A - L - CY")
         }
         0x9e => {
-            println!(" 	SBB M	1	Z, S, P, CY, AC	A <- A - (HL) - CY");
-            1
+            format!(" 	SBB M	1	Z, S, P, CY, AC	A <- A - (HL) - CY")
         }
         0x9f => {
-            println!(" 	SBB A	1	Z, S, P, CY, AC	A <- A - A - CY");
-            1
+            format!(" 	SBB A	1	Z, S, P, CY, AC	A <- A - A - CY")
         }
         0xa0 => {
-            println!(" 	ANA B	1	Z, S, P, CY, AC	A <- A & B");
-            1
+            format!(" 	ANA B	1	Z, S, P, CY, AC	A <- A & B")
         }
         0xa1 => {
-            println!(" 	ANA C	1	Z, S, P, CY, AC	A <- A & C");
-            1
+            format!(" 	ANA C	1	Z, S, P, CY, AC	A <- A & C")
         }
         0xa2 => {
-            println!(" 	ANA D	1	Z, S, P, CY, AC	A <- A & D");
-            1
+            format!(" 	ANA D	1	Z, S, P, CY, AC	A <- A & D")
         }
         0xa3 => {
-            println!(" 	ANA E	1	Z, S, P, CY, AC	A <- A & E");
-            1
+            format!(" 	ANA E	1	Z, S, P, CY, AC	A <- A & E")
         }
         0xa4 => {
-            println!(" 	ANA H	1	Z, S, P, CY, AC	A <- A & H");
-            1
+            format!(" 	ANA H	1	Z, S, P, CY, AC	A <- A & H")
         }
         0xa5 => {
-            println!(" 	ANA L	1	Z, S, P, CY, AC	A <- A & L");
-            1
+            format!(" 	ANA L	1	Z, S, P, CY, AC	A <- A & L")
         }
         0xa6 => {
-            println!(" 	ANA M	1	Z, S, P, CY, AC	A <- A & (HL)");
-            1
+            format!(" 	ANA M	1	Z, S, P, CY, AC	A <- A & (HL)")
         }
         0xa7 => {
-            println!(" 	ANA A	1	Z, S, P, CY, AC	A <- A & A");
-            1
+            format!(" 	ANA A	1	Z, S, P, CY, AC	A <- A & A")
         }
         0xa8 => {
-            println!(" 	XRA B	1	Z, S, P, CY, AC	A <- A ^ B");
-            1
+            format!(" 	XRA B	1	Z, S, P, CY, AC	A <- A ^ B")
         }
         0xa9 => {
-            println!(" 	XRA C	1	Z, S, P, CY, AC	A <- A ^ C");
-            1
+            format!(" 	XRA C	1	Z, S, P, CY, AC	A <- A ^ C")
         }
         0xaa => {
-            println!(" 	XRA D	1	Z, S, P, CY, AC	A <- A ^ D");
-            1
+            format!(" 	XRA D	1	Z, S, P, CY, AC	A <- A ^ D")
         }
         0xab => {
-            println!(" 	XRA E	1	Z, S, P, CY, AC	A <- A ^ E");
-            1
+            format!(" 	XRA E	1	Z, S, P, CY, AC	A <- A ^ E")
         }
         0xac => {
-            println!(" 	XRA H	1	Z, S, P, CY, AC	A <- A ^ H");
-            1
+            format!(" 	XRA H	1	Z, S, P, CY, AC	A <- A ^ H")
         }
         0xad => {
-            println!(" 	XRA L	1	Z, S, P, CY, AC	A <- A ^ L");
-            1
+            format!(" 	XRA L	1	Z, S, P, CY, AC	A <- A ^ L")
         }
         0xae => {
-            println!(" 	XRA M	1	Z, S, P, CY, AC	A <- A ^ (HL)");
-            1
+            format!(" 	XRA M	1	Z, S, P, CY, AC	A <- A ^ (HL)")
         }
         0xaf => {
-            println!(" 	XRA A	1	Z, S, P, CY, AC	A <- A ^ A");
-            1
+            format!(" 	XRA A	1	Z, S, P, CY, AC	A <- A ^ A")
         }
         0xb0 => {
-            println!(" 	ORA B	1	Z, S, P, CY, AC	A <- A | B");
-            1
+            format!(" 	ORA B	1	Z, S, P, CY, AC	A <- A | B")
         }
         0xb1 => {
-            println!(" 	ORA C	1	Z, S, P, CY, AC	A <- A | C");
-            1
+            format!(" 	ORA C	1	Z, S, P, CY, AC	A <- A | C")
         }
         0xb2 => {
-            println!(" 	ORA D	1	Z, S, P, CY, AC	A <- A | D");
-            1
+            format!(" 	ORA D	1	Z, S, P, CY, AC	A <- A | D")
         }
         0xb3 => {
-            println!(" 	ORA E	1	Z, S, P, CY, AC	A <- A | E");
-            1
+            format!(" 	ORA E	1	Z, S, P, CY, AC	A <- A | E")
         }
         0xb4 => {
-            println!(" 	ORA H	1	Z, S, P, CY, AC	A <- A | H");
-            1
+            format!(" 	ORA H	1	Z, S, P, CY, AC	A <- A | H")
         }
         0xb5 => {
-            println!(" 	ORA L	1	Z, S, P, CY, AC	A <- A | L");
-            1
+            format!(" 	ORA L	1	Z, S, P, CY, AC	A <- A | L")
         }
         0xb6 => {
-            println!(" 	ORA M	1	Z, S, P, CY, AC	A <- A | (HL)");
-            1
+            format!(" 	ORA M	1	Z, S, P, CY, AC	A <- A | (HL)")
         }
         0xb7 => {
-            println!(" 	ORA A	1	Z, S, P, CY, AC	A <- A | A");
-            1
+            format!(" 	ORA A	1	Z, S, P, CY, AC	A <- A | A")
         }
         0xb8 => {
-            println!(" 	CMP B	1	Z, S, P, CY, AC	A - B");
-            1
+            format!(" 	CMP B	1	Z, S, P, CY, AC	A - B")
         }
         0xb9 => {
-            println!(" 	CMP C	1	Z, S, P, CY, AC	A - C");
-            1
+            format!(" 	CMP C	1	Z, S, P, CY, AC	A - C")
         }
         0xba => {
-            println!(" 	CMP D	1	Z, S, P, CY, AC	A - D");
-            1
+            format!(" 	CMP D	1	Z, S, P, CY, AC	A - D")
         }
         0xbb => {
-            println!(" 	CMP E	1	Z, S, P, CY, AC	A - E");
-            1
+            format!(" 	CMP E	1	Z, S, P, CY, AC	A - E")
         }
         0xbc => {
-            println!(" 	CMP H	1	Z, S, P, CY, AC	A - H");
-            1
+            format!(" 	CMP H	1	Z, S, P, CY, AC	A - H")
         }
         0xbd => {
-            println!(" 	CMP L	1	Z, S, P, CY, AC	A - L");
-            1
+            format!(" 	CMP L	1	Z, S, P, CY, AC	A - L")
         }
         0xbe => {
-            println!(" 	CMP M	1	Z, S, P, CY, AC	A - (HL)");
-            1
+            format!(" 	CMP M	1	Z, S, P, CY, AC	A - (HL)")
         }
         0xbf => {
-            println!(" 	CMP A	1	Z, S, P, CY, AC	A - A");
-            1
+            format!(" 	CMP A	1	Z, S, P, CY, AC	A - A")
         }
         0xc0 => {
-            println!(" 	RNZ	1		if NZ, RET");
-            1
+            format!(" 	RNZ	1		if NZ, RET")
         }
         0xc1 => {
-            println!(" 	POP B	1		C <- (sp); B <- (sp+1); sp <- sp+2");
-            1
+            format!(" 	POP B	1		C <- (sp); B <- (sp+1); sp <- sp+2")
         }
         0xc2 => {
-            println!(" 	JNZ adr	3		if NZ, PC <- adr");
-            3
+            format!(" 	JNZ adr	3		if NZ, PC <- adr")
         }
         0xc3 => {
-            println!(" 	JMP adr	3		PC <= adr");
-            3
+            format!(" 	JMP adr	3		PC <= adr")
         }
         0xc4 => {
-            println!(" 	CNZ adr	3		if NZ, CALL adr");
-            3
+            format!(" 	CNZ adr	3		if NZ, CALL adr")
         }
         0xc5 => {
-            println!(" 	PUSH B	1		(sp-2)<-C; (sp-1)<-B; sp <- sp - 2");
-            1
+            format!(" 	PUSH B	1		(sp-2)<-C; (sp-1)<-B; sp <- sp - 2")
         }
         0xc6 => {
-            println!(" 	ADI D8	2	Z, S, P, CY, AC	A <- A + byte");
-            2
+            format!(" 	ADI D8	2	Z, S, P, CY, AC	A <- A + byte")
         }
         0xc7 => {
-            println!(" 	RST 0	1		CALL $0");
-            1
+            format!(" 	RST 0	1		CALL $0")
         }
         0xc8 => {
-            println!(" 	RZ	1		if Z, RET");
-            1
+            format!(" 	RZ	1		if Z, RET")
         }
         0xc9 => {
-            println!(" 	RET	1		PC.lo <- (sp); PC.hi<-(sp+1); SP <- SP+2");
-            1
+            format!(" 	RET	1		PC.lo <- (sp); PC.hi<-(sp+1); SP <- SP+2")
         }
         0xca => {
-            println!(" 	JZ adr	3		if Z, PC <- adr");
-            3
+            format!(" 	JZ adr	3		if Z, PC <- adr")
         }
         0xcb => {
-            println!(" 	-			");
-            1
+            format!(" 	-			")
         }
         0xcc => {
-            println!(" 	CZ adr	3		if Z, CALL adr");
-            3
+            format!(" 	CZ adr	3		if Z, CALL adr")
         }
         0xcd => {
-            println!(" 	CALL adr	3		(SP-1)<-PC.hi;(SP-2)<-PC.lo;SP<-SP-2;PC=adr");
-            3
+            format!(" 	CALL adr	3		(SP-1)<-PC.hi;(SP-2)<-PC.lo;SP<-SP-2;PC=adr")
         }
         0xce => {
-            println!(" 	ACI D8	2	Z, S, P, CY, AC	A <- A + data + CY");
-            2
+            format!(" 	ACI D8	2	Z, S, P, CY, AC	A <- A + data + CY")
         }
         0xcf => {
-            println!(" 	RST 1	1		CALL $8");
-            1
+            format!(" 	RST 1	1		CALL $8")
         }
         0xd0 => {
-            println!(" 	RNC	1		if NCY, RET");
-            1
+            format!(" 	RNC	1		if NCY, RET")
         }
         0xd1 => {
-            println!(" 	POP D	1		E <- (sp); D <- (sp+1); sp <- sp+2");
-            1
+            format!(" 	POP D	1		E <- (sp); D <- (sp+1); sp <- sp+2")
         }
         0xd2 => {
-            println!(" 	JNC adr	3		if NCY, PC<-adr");
-            3
+            format!(" 	JNC adr	3		if NCY, PC<-adr")
         }
         0xd3 => {
-            println!(" 	OUT D8	2		special");
-            2
+            format!(" 	OUT D8	2		special")
         }
         0xd4 => {
-            println!(" 	CNC adr	3		if NCY, CALL adr");
-            3
+            format!(" 	CNC adr	3		if NCY, CALL adr")
         }
         0xd5 => {
-            println!(" 	PUSH D	1		(sp-2)<-E; (sp-1)<-D; sp <- sp - 2");
-            1
+            format!(" 	PUSH D	1		(sp-2)<-E; (sp-1)<-D; sp <- sp - 2")
         }
         0xd6 => {
-            println!(" 	SUI D8	2	Z, S, P, CY, AC	A <- A - data");
-            2
+            format!(" 	SUI D8	2	Z, S, P, CY, AC	A <- A - data")
         }
         0xd7 => {
-            println!(" 	RST 2	1		CALL $10");
-            1
+            format!(" 	RST 2	1		CALL $10")
         }
         0xd8 => {
-            println!(" 	RC	1		if CY, RET");
-            1
+            format!(" 	RC	1		if CY, RET")
         }
         0xd9 => {
-            println!(" 	-			");
-            1
+            format!(" 	-			")
         }
         0xda => {
-            println!(" 	JC adr	3		if CY, PC<-adr");
-            3
+            format!(" 	JC adr	3		if CY, PC<-adr")
         }
         0xdb => {
-            println!(" 	IN D8	2		special");
-            2
+            format!(" 	IN D8	2		special")
         }
         0xdc => {
-            println!(" 	CC adr	3		if CY, CALL adr");
-            3
+            format!(" 	CC adr	3		if CY, CALL adr")
         }
         0xdd => {
-            println!(" 	-			");
-            1
+            format!(" 	-			")
         }
         0xde => {
-            println!(" 	SBI D8	2	Z, S, P, CY, AC	A <- A - data - CY");
-            2
+            format!(" 	SBI D8	2	Z, S, P, CY, AC	A <- A - data - CY")
         }
         0xdf => {
-            println!(" 	RST 3	1		CALL $18");
-            1
+            format!(" 	RST 3	1		CALL $18")
         }
         0xe0 => {
-            println!(" 	RPO	1		if PO, RET");
-            1
+            format!(" 	RPO	1		if PO, RET")
         }
         0xe1 => {
-            println!(" 	POP H	1		L <- (sp); H <- (sp+1); sp <- sp+2");
-            1
+            format!(" 	POP H	1		L <- (sp); H <- (sp+1); sp <- sp+2")
         }
         0xe2 => {
-            println!(" 	JPO adr	3		if PO, PC <- adr");
-            3
+            format!(" 	JPO adr	3		if PO, PC <- adr")
         }
         0xe3 => {
-            println!(" 	XTHL	1		L <-> (SP); H <-> (SP+1)");
-            1
+            format!(" 	XTHL	1		L <-> (SP); H <-> (SP+1)")
         }
         0xe4 => {
-            println!(" 	CPO adr	3		if PO, CALL adr");
-            3
+            format!(" 	CPO adr	3		if PO, CALL adr")
         }
         0xe5 => {
-            println!(" 	PUSH H	1		(sp-2)<-L; (sp-1)<-H; sp <- sp - 2");
-            1
+            format!(" 	PUSH H	1		(sp-2)<-L; (sp-1)<-H; sp <- sp - 2")
         }
         0xe6 => {
-            println!(" 	ANI D8	2	Z, S, P, CY, AC	A <- A & data");
-            2
+            format!(" 	ANI D8	2	Z, S, P, CY, AC	A <- A & data")
         }
         0xe7 => {
-            println!(" 	RST 4	1		CALL $20");
-            1
+            format!(" 	RST 4	1		CALL $20")
         }
         0xe8 => {
-            println!(" 	RPE	1		if PE, RET");
-            1
+            format!(" 	RPE	1		if PE, RET")
         }
         0xe9 => {
-            println!(" 	PCHL	1		PC.hi <- H; PC.lo <- L");
-            1
+            format!(" 	PCHL	1		PC.hi <- H; PC.lo <- L")
         }
         0xea => {
-            println!(" 	JPE adr	3		if PE, PC <- adr");
-            3
+            format!(" 	JPE adr	3		if PE, PC <- adr")
         }
         0xeb => {
-            println!(" 	XCHG	1		H <-> D; L <-> E");
-            1
+            format!(" 	XCHG	1		H <-> D; L <-> E")
         }
         0xec => {
-            println!(" 	CPE adr	3		if PE, CALL adr");
-            3
+            format!(" 	CPE adr	3		if PE, CALL adr")
         }
         0xed => {
-            println!(" 	-			");
-            1
+            format!(" 	-			")
         }
         0xee => {
-            println!(" 	XRI D8	2	Z, S, P, CY, AC	A <- A ^ data");
-            2
+            format!(" 	XRI D8	2	Z, S, P, CY, AC	A <- A ^ data")
         }
         0xef => {
-            println!(" 	RST 5	1		CALL $28");
-            1
+            format!(" 	RST 5	1		CALL $28")
         }
         0xf0 => {
-            println!(" 	RP	1		if P, RET");
-            1
+            format!(" 	RP	1		if P, RET")
         }
         0xf1 => {
-            println!(" 	POP PSW	1		flags <- (sp); A <- (sp+1); sp <- sp+2");
-            1
+            format!(" 	POP PSW	1		flags <- (sp); A <- (sp+1); sp <- sp+2")
         }
         0xf2 => {
-            println!(" 	JP adr	3		if P=1 PC <- adr");
-            3
+            format!(" 	JP adr	3		if P=1 PC <- adr")
         }
         0xf3 => {
-            println!(" 	DI	1		special");
-            1
+            format!(" 	DI	1		special")
         }
         0xf4 => {
-            println!(" 	CP adr	3		if P, PC <- adr");
-            3
+            format!(" 	CP adr	3		if P, PC <- adr")
         }
         0xf5 => {
-            println!(" 	PUSH PSW	1		(sp-2)<-flags; (sp-1)<-A; sp <- sp - 2");
-            1
+            format!(" 	PUSH PSW	1		(sp-2)<-flags; (sp-1)<-A; sp <- sp - 2")
         }
         0xf6 => {
-            println!(" 	ORI D8	2	Z, S, P, CY, AC	A <- A | data");
-            2
+            format!(" 	ORI D8	2	Z, S, P, CY, AC	A <- A | data")
         }
         0xf7 => {
-            println!(" 	RST 6	1		CALL $30");
-            1
+            format!(" 	RST 6	1		CALL $30")
         }
         0xf8 => {
-            println!(" 	RM	1		if M, RET");
-            1
+            format!(" 	RM	1		if M, RET")
         }
         0xf9 => {
-            println!(" 	SPHL	1		SP=HL");
-            1
+            format!(" 	SPHL	1		SP=HL")
         }
         0xfa => {
-            println!(" 	JM adr	3		if M, PC <- adr");
-            3
+            format!(" 	JM adr	3		if M, PC <- adr")
         }
         0xfb => {
-            println!(" 	EI	1		special");
-            1
+            format!(" 	EI	1		special")
         }
         0xfc => {
-            println!(" 	CM adr	3		if M, CALL adr");
-            3
+            format!(" 	CM adr	3		if M, CALL adr")
         }
         0xfd => {
-            println!(" 	-			");
-            1
+            format!(" 	-			")
         }
         0xfe => {
-            println!(" 	CPI D8	2	Z, S, P, CY, AC	A - data");
-            2
+            format!(" 	CPI D8	2	Z, S, P, CY, AC	A - data")
         }
         0xff => {
-            println!(" 	RST 7	1		CALL $38");
-            1
+            format!(" 	RST 7	1		CALL $38")
         }
     }
 }
