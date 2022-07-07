@@ -107,9 +107,9 @@ mod debug_utils;
 mod eighty_eighty_emulator;
 mod space_invaders_rom;
 
-use eighty_eighty_emulator::{ProcessorState, SpaceInvadersMemMap};
+use eighty_eighty_emulator::{MemMap, ProcessorState};
 
-fn emulation_loop(mut this_processor: ProcessorState, mut this_mem_map: SpaceInvadersMemMap) -> ! {
+fn emulation_loop(mut this_processor: ProcessorState, mut this_mem_map: MemMap) -> ! {
     loop {
         eighty_eighty_emulator::iterate_processor_state(&mut this_processor, &mut this_mem_map);
     }
@@ -117,6 +117,6 @@ fn emulation_loop(mut this_processor: ProcessorState, mut this_mem_map: SpaceInv
 
 fn main() {
     let this_processor = ProcessorState::new();
-    let this_mem_map = SpaceInvadersMemMap::new();
+    let this_mem_map = MemMap::new();
     emulation_loop(this_processor, this_mem_map);
 }
