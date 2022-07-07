@@ -1,6 +1,7 @@
 #![allow(clippy::unusual_byte_groupings)]
 use bitflags::bitflags;
 use std::convert::From;
+use std::mem;
 use std::{
     fmt::Debug,
     ops::{Index, IndexMut},
@@ -151,10 +152,9 @@ impl Index<u16> for MemMap {
     type Output = u8;
     fn index(&self, idx: u16) -> &Self::Output {
         if idx < (space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) {
-            return &self.rom[idx as usize];
+            &self.rom[idx as usize]
         } else {
-            return &self.rw_mem
-                [(idx - space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) as usize];
+            &self.rw_mem[(idx - space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) as usize]
         }
     }
 }
@@ -165,13 +165,12 @@ impl IndexMut<u16> for MemMap {
     fn index_mut(&mut self, idx: u16) -> &mut Self::Output {
         if idx < (space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) {
             if cfg!(test) {
-                return &mut self.rom[idx as usize];
+                &mut self.rom[idx as usize]
             } else {
                 panic!("Attempted to mutate ROM");
             }
         } else {
-            return &mut self.rw_mem
-                [(idx - space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) as usize];
+            &mut self.rw_mem[(idx - space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) as usize]
         }
     }
 }
@@ -1380,12 +1379,8 @@ fn opcode_stax(state: &mut ProcessorState, mem_map: &mut MemMap) {
 /// The contents of registers Hand L are exchanged with
 /// the contents of registers D and E.
 fn opcode_xchg(state: &mut ProcessorState, _mem_map: &mut MemMap) {
-    let temp_d = state.reg_d;
-    state.reg_d = state.reg_h;
-    state.reg_h = temp_d;
-    let temp_e = state.reg_e;
-    state.reg_e = state.reg_l;
-    state.reg_l = temp_e;
+    mem::swap(&mut state.reg_d, &mut state.reg_h);
+    mem::swap(&mut state.reg_e, &mut state.reg_l);
     state.prog_counter += 1;
 }
 
@@ -1815,13 +1810,9 @@ fn opcode_pop(state: &mut ProcessorState, mem_map: &mut MemMap) {
 /// memory location whose address is one more than the
 /// content of register SP
 fn opcode_xthl(state: &mut ProcessorState, mem_map: &mut MemMap) {
-    let temp_l = state.reg_l;
-    state.reg_l = mem_map[state.stack_pointer];
-    mem_map[state.stack_pointer] = temp_l;
-
-    let temp_h = state.reg_h;
-    state.reg_h = mem_map[state.stack_pointer + 1];
-    mem_map[state.stack_pointer + 1] = temp_h;
+    mem::swap(&mut state.reg_l, &mut mem_map[state.stack_pointer]);
+    mem::swap(&mut state.reg_h, &mut mem_map[state.stack_pointer + 1]);
+    state.prog_counter += 1;
 }
 
 /// SPHL (Move HL to SP)
@@ -1830,6 +1821,7 @@ fn opcode_xthl(state: &mut ProcessorState, mem_map: &mut MemMap) {
 /// to register SP.
 fn opcode_sphl(state: &mut ProcessorState, _mem_map: &mut MemMap) {
     state.stack_pointer = state.get_rp(RPairBitPattern::HL);
+    state.prog_counter += 1;
 }
 
 // Todo: swap out register pair register condition flag and other bit twiddling
@@ -2577,6 +2569,7 @@ mod tests {
         assert_ne!(0x0020, test_state.prog_counter);
         iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(0x0020, test_state.prog_counter);
+        assert_ne!(test_state.prog_counter, 0);
     }
     #[test]
     fn push_byte() {
@@ -2584,6 +2577,7 @@ mod tests {
         let mut si_mem = MemMap::new();
         test_state.flags.set(ConditionFlags::Z, true);
         test_state.flags.set(ConditionFlags::CY, true);
+        let orig_stack_pointer = test_state.stack_pointer;
         test_state.push_byte(&mut si_mem, test_state.flags.bits);
         let mut test_flags = ConditionFlags {
             bits: (0b0000_0000),
@@ -2591,6 +2585,7 @@ mod tests {
         test_flags.set(ConditionFlags::Z, true);
         test_flags.set(ConditionFlags::CY, true);
         assert_eq!(si_mem[test_state.stack_pointer], test_flags.bits);
+        assert_ne!(test_state.stack_pointer, orig_stack_pointer);
     }
 
     #[test]
@@ -2600,12 +2595,14 @@ mod tests {
         test_state.flags.set(ConditionFlags::Z, true);
         test_state.flags.set(ConditionFlags::CY, true);
         test_state.push_byte(&mut si_mem, test_state.flags.bits);
+        let orig_stack_pointer = test_state.stack_pointer;
         let mut test_flags = ConditionFlags {
             bits: (0b0000_0000),
         };
         test_flags.set(ConditionFlags::Z, true);
         test_flags.set(ConditionFlags::CY, true);
         assert_eq!(test_state.pop_byte(&mut si_mem), test_flags.bits);
+        assert_ne!(test_state.stack_pointer, orig_stack_pointer);
     }
 
     #[test]
@@ -2624,10 +2621,12 @@ mod tests {
 
         si_mem.rom = test_rom;
         iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_ne!(test_state.prog_counter, 0);
         assert_ne!(original_stack_pointer, test_state.stack_pointer);
         test_state.reg_b = 0;
         test_state.reg_c = 0;
         iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_ne!(test_state.prog_counter, 1);
         assert_eq!(test_state.get_rp(RPairBitPattern::BC), 0xfffe);
         assert_eq!(original_stack_pointer, test_state.stack_pointer);
     }
@@ -2657,7 +2656,7 @@ mod tests {
         test_flags.set(ConditionFlags::S, true);
         si_mem.rom = test_rom;
         iterate_processor_state(&mut test_state, &mut si_mem);
-
+        assert_ne!(test_state.prog_counter, 0);
         assert_ne!(original_stack_pointer, test_state.stack_pointer);
         test_state.reg_a = 0;
         test_state.flags = ConditionFlags {
@@ -2667,6 +2666,7 @@ mod tests {
         assert_eq!(test_state.reg_a, 0xfe);
         assert_eq!(test_state.flags, test_flags);
         assert_eq!(original_stack_pointer, test_state.stack_pointer);
+        assert_ne!(test_state.prog_counter, 1);
     }
 
     #[test]
@@ -2684,6 +2684,7 @@ mod tests {
         assert_ne!(test_state.get_rp(RPairBitPattern::HL), 0xbeef);
         iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.get_rp(RPairBitPattern::HL), 0xbeef);
+        assert_ne!(test_state.prog_counter, 0);
     }
 
     #[test]
@@ -2706,6 +2707,7 @@ mod tests {
             test_state.get_rp(RPairBitPattern::HL),
             test_state.stack_pointer
         );
+        assert_ne!(test_state.prog_counter, 0);
     }
 
     #[test]
@@ -2725,6 +2727,7 @@ mod tests {
         assert_ne!(test_state.reg_a, 0xfe);
         iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.reg_a, 0xfe);
+        assert_ne!(test_state.prog_counter, 0);
     }
 
     #[test]
@@ -2744,6 +2747,7 @@ mod tests {
         assert_ne!(si_mem[some_address], 0xfe);
         iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(si_mem[some_address], 0xfe);
+        assert_ne!(test_state.prog_counter, 0);
     }
 
     #[test]
@@ -2766,6 +2770,7 @@ mod tests {
         iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.reg_l, 0xbe);
         assert_eq!(test_state.reg_h, 0xef);
+        assert_ne!(test_state.prog_counter, 0);
     }
 
     #[test]
@@ -2787,6 +2792,7 @@ mod tests {
         iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(si_mem[some_address], 0xbe);
         assert_eq!(si_mem[some_address + 1], 0xef);
+        assert_ne!(test_state.prog_counter, 0);
     }
 
     #[test]
@@ -2807,6 +2813,7 @@ mod tests {
         assert_ne!(si_mem[some_address], 0xfe);
         iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(si_mem[some_address], 0xfe);
+        assert_ne!(test_state.prog_counter, 0);
     }
 
     #[test]
@@ -2830,5 +2837,6 @@ mod tests {
         assert_eq!(test_state.reg_l, 0xef);
         assert_eq!(test_state.reg_d, 0x00);
         assert_eq!(test_state.reg_e, 0x00);
+        assert_ne!(test_state.prog_counter, 0);
     }
 }
