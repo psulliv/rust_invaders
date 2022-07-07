@@ -13,11 +13,11 @@ use crate::{debug_utils::debug_print_op_code, space_invaders_rom};
 
 bitflags! {
     struct ConditionFlags: u8 {
-    const Z =  0b0000_0001;
-    const CY = 0b0000_0010;
-    const S =  0b0000_0100;
-    const AC = 0b0000_1000;
-    const P =  0b0001_0000;
+    const CY = 0b0000_0001;
+    const P =  0b0000_0100;
+    const AC = 0b0001_0000;
+    const Z =  0b0100_0000;
+    const S =  0b1000_0000;
     }
 }
 
@@ -102,12 +102,24 @@ impl ProcessorState {
         self.stack_pointer -= 2;
     }
 
+    // Push one byte
+    pub fn push_byte(&mut self, mem_map: &mut SpaceInvadersMemMap, this_data: u8) {
+        mem_map[self.stack_pointer - 1] = this_data;
+        self.stack_pointer -= 1;
+    }
+
     // Pops an address from the stack
     pub fn pop_address(&mut self, mem_map: &mut SpaceInvadersMemMap) -> u16 {
         let mut address = (mem_map[self.stack_pointer + 1] as u16) << 8;
         address |= mem_map[self.stack_pointer] as u16;
         self.stack_pointer += 2;
         address
+    }
+
+    pub fn pop_byte(&mut self, mem_map: &mut SpaceInvadersMemMap) -> u8 {
+        let mut this_data = mem_map[self.stack_pointer];
+        self.stack_pointer += 1;
+        this_data
     }
 
     pub fn check_condition(&self, condition: ConditionBitPattern) -> bool {
@@ -1012,8 +1024,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             opcode_ret(state, mem_map);
         }
         0xc1 => {
-            panic!(" 	POP B	1		C <- (sp); B <- (sp+1); sp <- sp+2");
-            // 1
+	    opcode_pop(state,mem_map);
         }
         0xc2 => {
             opcode_jmp(state, mem_map);
@@ -1026,8 +1037,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             opcode_call(state, mem_map);
         }
         0xc5 => {
-            panic!(" 	PUSH B	1		(sp-2)<-C; (sp-1)<-B; sp <- sp - 2");
-            // 1
+            opcode_push(state, mem_map);
         }
         0xc6 => {
             panic!(" 	ADI D8	2	Z, S, P, CY, AC	A <- A + byte");
@@ -1068,8 +1078,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             opcode_ret(state, mem_map);
         }
         0xd1 => {
-            panic!(" 	POP D	1		E <- (sp); D <- (sp+1); sp <- sp+2");
-            // 1
+	    opcode_pop(state,mem_map);	    
         }
         0xd2 => {
             opcode_jmp(state, mem_map);
@@ -1083,8 +1092,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             opcode_call(state, mem_map);
         }
         0xd5 => {
-            panic!(" 	PUSH D	1		(sp-2)<-E; (sp-1)<-D; sp <- sp - 2");
-            // 1
+            opcode_push(state, mem_map);
         }
         0xd6 => {
             panic!(" 	SUI D8	2	Z, S, P, CY, AC	A <- A - data");
@@ -1126,8 +1134,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             opcode_ret(state, mem_map);
         }
         0xe1 => {
-            panic!(" 	POP H	1		L <- (sp); H <- (sp+1); sp <- sp+2");
-            // 1
+	    opcode_pop(state,mem_map);	    
         }
         0xe2 => {
             opcode_jmp(state, mem_map);
@@ -1141,8 +1148,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             opcode_call(state, mem_map);
         }
         0xe5 => {
-            panic!(" 	PUSH H	1		(sp-2)<-L; (sp-1)<-H; sp <- sp - 2");
-            // 1
+            opcode_push(state, mem_map);
         }
         0xe6 => {
             panic!(" 	ANI D8	2	Z, S, P, CY, AC	A <- A & data");
@@ -1183,9 +1189,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             opcode_ret(state, mem_map);
         }
         0xf1 => {
-            panic!(" 	POP PSW	1		flags <- (sp); A <- (sp+1); sp <- sp+2");
-            // 1
-        }
+	    opcode_pop(state,mem_map);	            }
         0xf2 => {
             opcode_jmp(state, mem_map);
             // 3
@@ -1198,8 +1202,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             opcode_call(state, mem_map);
         }
         0xf5 => {
-            panic!(" 	PUSH PSW	1		(sp-2)<-flags; (sp-1)<-A; sp <- sp - 2");
-            // 1
+            opcode_push(state, mem_map);
         }
         0xf6 => {
             panic!(" 	ORI D8	2	Z, S, P, CY, AC	A <- A | data");
@@ -1653,6 +1656,86 @@ fn opcode_rst(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
 /// moved to the low-order eight bits of register PC.
 fn opcode_pchl(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     state.prog_counter = state.get_rp(RPairBitPattern::HL);
+}
+
+/// PUSH rp (Push)
+/// ((SP) - 1) ~ (rh)
+/// ((SP) - 2) ~ (rl)
+/// (SP) ~ (SP) - 2
+/// The content of the high-order register of register pair
+/// rp is moved to the memory location whose address is
+/// one less than the content of register SP. The content
+/// of the low-order register of register pair rp is moved
+/// to the memory location whose address is two less
+/// than the content of register SP. The cont~nt of reg-
+/// ister SP is decremented by 2. Note: Register pair
+/// rp = SP may not be specified ..
+fn opcode_push(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
+    let cur_instruction = mem_map[state.prog_counter];
+    let rpair: RPairBitPattern = ((cur_instruction & 0b00_11_0000) >> 4).into();
+    match rpair {
+        RPairBitPattern::BC => {
+            let this_data = state.get_rp(rpair);
+            state.push_address(mem_map, this_data);
+        }
+        RPairBitPattern::DE => {
+            let this_data = state.get_rp(rpair);
+            state.push_address(mem_map, this_data);
+        }
+        RPairBitPattern::HL => {
+            let this_data = state.get_rp(rpair);
+            state.push_address(mem_map, this_data);
+        }
+        RPairBitPattern::SP => {
+            // Not really SP this is used for pushing the condition flags
+            // and the accumulator
+            let the_flags = state.flags.bits;
+            let the_accumulator = state.reg_a;
+            state.push_byte(mem_map, the_accumulator);
+            state.push_byte(mem_map, the_flags);
+        }
+    }
+    state.prog_counter += 1;
+}
+
+/// POP rp (Pop)
+/// (rl) ~((SP))
+/// (rh) ~ ((SP) + 1)
+/// (SP) ~ (SP) + 2
+/// The content of the memory location, whose address
+/// is specified by the content of register SP, is moved to
+/// the low-order register of register pair rp. The content
+/// of the memory location, whose address is one more
+/// than the content of register SP, is moved to the high-
+/// order register of register pair rp. The content of reg-
+/// ister SP is incremented by 2. Note: Register pair
+/// rp =SP may not be specified
+fn opcode_pop(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
+    let cur_instruction = mem_map[state.prog_counter];
+    let rpair: RPairBitPattern = (cur_instruction & 0b00_11_0000).into();
+    match rpair {
+        RPairBitPattern::BC => {
+            let this_data = state.pop_address(mem_map);
+            state.set_rp(this_data, RPairBitPattern::BC)
+        }
+        RPairBitPattern::DE => {
+            let this_data = state.pop_address(mem_map);
+            state.set_rp(this_data, RPairBitPattern::DE)
+        }
+        RPairBitPattern::HL => {
+            let this_data = state.pop_address(mem_map);
+            state.set_rp(this_data, RPairBitPattern::HL)
+        }
+        RPairBitPattern::SP => {
+            // Not really SP this is used for pushing the condition flags
+            let the_flags = state.pop_byte(mem_map);
+            state.flags = ConditionFlags { bits: (the_flags) };
+            let the_accumulator = state.pop_byte(mem_map);
+            state.reg_a = the_accumulator;
+        }
+    }
+
+    state.prog_counter += 1;
 }
 
 // Todo: remove extra match branches in the iterate state function
@@ -2404,5 +2487,84 @@ mod tests {
         assert_ne!(0x0020, test_state.prog_counter);
         iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(0x0020, test_state.prog_counter);
+    }
+    #[test]
+    fn push_byte() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        test_state.flags.set(ConditionFlags::Z, true);
+        test_state.flags.set(ConditionFlags::CY, true);
+        test_state.push_byte(&mut si_mem, test_state.flags.bits);
+        let mut test_flags = ConditionFlags {
+            bits: (0b0000_0000),
+        };
+        test_flags.set(ConditionFlags::Z, true);
+        test_flags.set(ConditionFlags::CY, true);
+        assert_eq!(si_mem[test_state.stack_pointer], test_flags.bits);
+    }
+
+    #[test]
+    fn pop_byte() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        test_state.flags.set(ConditionFlags::Z, true);
+        test_state.flags.set(ConditionFlags::CY, true);
+        test_state.push_byte(&mut si_mem, test_state.flags.bits);
+        let mut test_flags = ConditionFlags {
+            bits: (0b0000_0000),
+        };
+        test_flags.set(ConditionFlags::Z, true);
+        test_flags.set(ConditionFlags::CY, true);
+        assert_eq!(test_state.pop_byte(&mut si_mem), test_flags.bits);
+    }
+
+    #[test]
+    fn push_pop_op_bc() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+
+        // Push opcode for bc
+        test_rom[0] = 0b11_00_0101;
+        // Pop opcode for bc
+        test_rom[1] = 0b11_00_0001;
+        let original_stack_pointer = test_state.stack_pointer;
+
+        test_state.set_rp(0xfffe, RPairBitPattern::BC);
+
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_ne!(original_stack_pointer, test_state.stack_pointer);
+        test_state.reg_b = 0;
+        test_state.reg_c = 0;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.get_rp(RPairBitPattern::BC), 0xfffe);
+        assert_eq!(original_stack_pointer, test_state.stack_pointer);
+    }
+
+    #[test]
+    fn push_pop_op_a_flags() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+
+        // Push opcode for flags and acc
+        test_rom[0] = 0b11_11_0101;
+        // Pop opcode for flags and acc
+        test_rom[1] = 0b11_11_0001;
+        let original_stack_pointer = test_state.stack_pointer;
+
+        panic!("Fix this test");
+        // Todo: need to set accumulator and flags and then check them
+
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+
+        assert_ne!(original_stack_pointer, test_state.stack_pointer);
+        test_state.reg_b = 0;
+        test_state.reg_c = 0;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.get_rp(RPairBitPattern::BC), 0xfffe);
+        assert_eq!(original_stack_pointer, test_state.stack_pointer);
     }
 }
