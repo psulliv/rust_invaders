@@ -1648,47 +1648,38 @@ fn opcode_mvi(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     // or
     // 0 | 0 | 1 | 1 | 0 | 1 | 1 | 0
     // ^^^ move to memory immediate
-
-    let dest = (mem_map[state.prog_counter as u16] & 0b00_111_000) >> 3;
+    let cur_instruction = mem_map[state.prog_counter];
+    let dest: RegisterBitPattern = ((cur_instruction & 0b00_111_000) >> 3).into();
     let second_byte = mem_map[state.prog_counter + 1];
     state.prog_counter += 2;
     match dest {
-        // A
-        0b111 => {
+        RegisterBitPattern::A => {
             state.reg_a = second_byte;
         }
-        // B
-        0b000 => {
+
+        RegisterBitPattern::B => {
             state.reg_b = second_byte;
         }
-        // C
-        0b001 => {
+
+        RegisterBitPattern::C => {
             state.reg_c = second_byte;
         }
-        // D
-        0b010 => {
+
+        RegisterBitPattern::D => {
             state.reg_d = second_byte;
         }
-        // E
-        0b011 => {
+        RegisterBitPattern::E => {
             state.reg_e = second_byte;
         }
-        // H
-        0b100 => {
+        RegisterBitPattern::H => {
             state.reg_h = second_byte;
         }
-        // L
-        0b101 => {
+        RegisterBitPattern::L => {
             state.reg_l = second_byte;
         }
-        // memory
-        0b110 => {
-            // Get address from reg pair H-L
+        RegisterBitPattern::Other => {
             let address = state.get_rp(RPairBitPattern::HL);
             mem_map[address] = second_byte;
-        }
-        _ => {
-            panic!("invalid register bits in opcode_mvi");
         }
     }
 }
@@ -1893,7 +1884,7 @@ fn opcode_sphl(state: &mut ProcessorState, _mem_map: &mut SpaceInvadersMemMap) {
 // somehow integrate memory layout and configuration into the processor state, maybe add
 // them under an overarching machine state? Maybe just integrate the `emulate_loop`
 // `iterate_state` and whatnot with a struct and method but leave the underlying impl
-// imperative?
+// imperativeish?
 
 #[cfg(test)]
 mod tests {
