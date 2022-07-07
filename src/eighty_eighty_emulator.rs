@@ -1211,8 +1211,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             opcode_ret(state, mem_map);
         }
         0xf9 => {
-            panic!(" 	SPHL	1		SP=HL");
-            // 1
+            opcode_sphl(state, mem_map);
         }
         0xfa => {
             opcode_jmp(state, mem_map);
@@ -1748,6 +1747,14 @@ fn opcode_xthl(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     let temp_h = state.reg_h;
     state.reg_h = mem_map[state.stack_pointer + 1];
     mem_map[state.stack_pointer + 1] = temp_h;
+}
+
+/// SPHL (Move HL to SP)
+/// (SP) ~ (H) (L)
+/// The contents of registers Hand L (16 bits) are moved
+/// to register SP.
+fn opcode_sphl(state: &mut ProcessorState, _mem_map: &mut SpaceInvadersMemMap) {
+    state.stack_pointer = state.get_rp(RPairBitPattern::HL);
 }
 
 // Todo: swap out register pair register condition flag and other bit twiddling
@@ -2609,5 +2616,27 @@ mod tests {
         assert_ne!(test_state.get_rp(RPairBitPattern::HL), 0xbeef);
         iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.get_rp(RPairBitPattern::HL), 0xbeef);
+    }
+
+    #[test]
+    fn sphl() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+
+        test_rom[0] = 0b11_111_001;
+        si_mem.rom = test_rom;
+        test_state.reg_h = 0xde;
+        test_state.reg_l = 0xad;
+
+        assert_ne!(
+            test_state.get_rp(RPairBitPattern::HL),
+            test_state.stack_pointer
+        );
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(
+            test_state.get_rp(RPairBitPattern::HL),
+            test_state.stack_pointer
+        );
     }
 }
