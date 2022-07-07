@@ -152,7 +152,7 @@ impl IndexMut<u16> for SpaceInvadersMemMap {
     }
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone, Copy)]
 pub enum RPairBitPattern {
     BC = 0b00,
     DE = 0b01,
@@ -172,7 +172,7 @@ impl From<u8> for RPairBitPattern {
     }
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone, Copy)]
 pub enum RegisterBitPattern {
     A = 0b111,
     B = 0b000,
@@ -202,7 +202,7 @@ impl From<u8> for RegisterBitPattern {
     }
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone, Copy)]
 pub enum ConditionBitPattern {
     NZ = 0b000,
     Z = 0b001,
@@ -252,7 +252,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0x03 => {
-            panic!(" 	INX B	1		BC <- BC+1");
+            opcode_inx(state, mem_map);
             // 1
         }
         0x04 => {
@@ -313,7 +313,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0x13 => {
-            panic!(" 	INX D	1		DE <- DE + 1");
+            opcode_inx(state, mem_map);
             // 1
         }
         0x14 => {
@@ -373,7 +373,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 3
         }
         0x23 => {
-            panic!(" 	INX H	1		HL <- HL + 1");
+            opcode_inx(state, mem_map);
             // 1
         }
         0x24 => {
@@ -434,7 +434,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 3
         }
         0x33 => {
-            panic!(" 	INX SP	1		SP = SP + 1");
+            opcode_inx(state, mem_map);
             // 1
         }
         0x34 => {
@@ -484,219 +484,219 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0x40 => {
-            panic!(" 	MOV B,B	1		B <- B");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x41 => {
-            panic!(" 	MOV B,C	1		B <- C");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x42 => {
-            panic!(" 	MOV B,D	1		B <- D");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x43 => {
-            panic!(" 	MOV B,E	1		B <- E");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x44 => {
-            panic!(" 	MOV B,H	1		B <- H");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x45 => {
-            panic!(" 	MOV B,L	1		B <- L");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x46 => {
-            panic!(" 	MOV B,M	1		B <- (HL)");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x47 => {
-            panic!(" 	MOV B,A	1		B <- A");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x48 => {
-            panic!(" 	MOV C,B	1		C <- B");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x49 => {
-            panic!(" 	MOV C,C	1		C <- C");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x4a => {
-            panic!(" 	MOV C,D	1		C <- D");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x4b => {
-            panic!(" 	MOV C,E	1		C <- E");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x4c => {
-            panic!(" 	MOV C,H	1		C <- H");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x4d => {
-            panic!(" 	MOV C,L	1		C <- L");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x4e => {
-            panic!(" 	MOV C,M	1		C <- (HL)");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x4f => {
-            panic!(" 	MOV C,A	1		C <- A");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x50 => {
-            panic!(" 	MOV D,B	1		D <- B");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x51 => {
-            panic!(" 	MOV D,C	1		D <- C");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x52 => {
-            panic!(" 	MOV D,D	1		D <- D");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x53 => {
-            panic!(" 	MOV D,E	1		D <- E");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x54 => {
-            panic!(" 	MOV D,H	1		D <- H");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x55 => {
-            panic!(" 	MOV D,L	1		D <- L");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x56 => {
-            panic!(" 	MOV D,M	1		D <- (HL)");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x57 => {
-            panic!(" 	MOV D,A	1		D <- A");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x58 => {
-            panic!(" 	MOV E,B	1		E <- B");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x59 => {
-            panic!(" 	MOV E,C	1		E <- C");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x5a => {
-            panic!(" 	MOV E,D	1		E <- D");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x5b => {
-            panic!(" 	MOV E,E	1		E <- E");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x5c => {
-            panic!(" 	MOV E,H	1		E <- H");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x5d => {
-            panic!(" 	MOV E,L	1		E <- L");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x5e => {
-            panic!(" 	MOV E,M	1		E <- (HL)");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x5f => {
-            panic!(" 	MOV E,A	1		E <- A");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x60 => {
-            panic!(" 	MOV H,B	1		H <- B");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x61 => {
-            panic!(" 	MOV H,C	1		H <- C");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x62 => {
-            panic!(" 	MOV H,D	1		H <- D");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x63 => {
-            panic!(" 	MOV H,E	1		H <- E");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x64 => {
-            panic!(" 	MOV H,H	1		H <- H");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x65 => {
-            panic!(" 	MOV H,L	1		H <- L");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x66 => {
-            panic!(" 	MOV H,M	1		H <- (HL)");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x67 => {
-            panic!(" 	MOV H,A	1		H <- A");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x68 => {
-            panic!(" 	MOV L,B	1		L <- B");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x69 => {
-            panic!(" 	MOV L,C	1		L <- C");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x6a => {
-            panic!(" 	MOV L,D	1		L <- D");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x6b => {
-            panic!(" 	MOV L,E	1		L <- E");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x6c => {
-            panic!(" 	MOV L,H	1		L <- H");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x6d => {
-            panic!(" 	MOV L,L	1		L <- L");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x6e => {
-            panic!(" 	MOV L,M	1		L <- (HL)");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x6f => {
-            panic!(" 	MOV L,A	1		L <- A");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x70 => {
-            panic!(" 	MOV M,B	1		(HL) <- B");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x71 => {
-            panic!(" 	MOV M,C	1		(HL) <- C");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x72 => {
-            panic!(" 	MOV M,D	1		(HL) <- D");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x73 => {
-            panic!(" 	MOV M,E	1		(HL) <- E");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x74 => {
-            panic!(" 	MOV M,H	1		(HL) <- H");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x75 => {
-            panic!(" 	MOV M,L	1		(HL) <- L");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x76 => {
@@ -704,39 +704,39 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0x77 => {
-            panic!(" 	MOV M,A	1		(HL) <- A");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x78 => {
-            panic!(" 	MOV A,B	1		A <- B");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x79 => {
-            panic!(" 	MOV A,C	1		A <- C");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x7a => {
-            panic!(" 	MOV A,D	1		A <- D");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x7b => {
-            panic!(" 	MOV A,E	1		A <- E");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x7c => {
-            panic!(" 	MOV A,H	1		A <- H");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x7d => {
-            panic!(" 	MOV A,L	1		A <- L");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x7e => {
-            panic!(" 	MOV A,M	1		A <- (HL)");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x7f => {
-            panic!(" 	MOV A,A	1		A <- A");
+            opcode_mov(state, mem_map);
             // 1
         }
         0x80 => {
@@ -1004,7 +1004,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0xc2 => {
-            panic!(" 	JNZ adr	3		if NZ, PC <- adr");
+            opcode_jmp(state, mem_map);
             // 3
         }
         0xc3 => {
@@ -1034,7 +1034,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0xca => {
-            panic!(" 	JZ adr	3		if Z, PC <- adr");
+            opcode_jmp(state, mem_map);
             // 3
         }
         0xcb => {
@@ -1064,7 +1064,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0xd2 => {
-            panic!(" 	JNC adr	3		if NCY, PC<-adr");
+            opcode_jmp(state, mem_map);
             // 3
         }
         0xd3 => {
@@ -1095,7 +1095,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0xda => {
-            panic!(" 	JC adr	3		if CY, PC<-adr");
+            opcode_jmp(state, mem_map);
             // 3
         }
         0xdb => {
@@ -1126,7 +1126,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0xe2 => {
-            panic!(" 	JPO adr	3		if PO, PC <- adr");
+            opcode_jmp(state, mem_map);
             // 3
         }
         0xe3 => {
@@ -1157,7 +1157,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0xea => {
-            panic!(" 	JPE adr	3		if PE, PC <- adr");
+            opcode_jmp(state, mem_map);
             // 3
         }
         0xeb => {
@@ -1188,7 +1188,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0xf2 => {
-            panic!(" 	JP adr	3		if P=1 PC <- adr");
+            opcode_jmp(state, mem_map);
             // 3
         }
         0xf3 => {
@@ -1219,7 +1219,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0xfa => {
-            panic!(" 	JM adr	3		if M, PC <- adr");
+            opcode_jmp(state, mem_map);
             // 3
         }
         0xfb => {
@@ -1242,7 +1242,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
     };
-    println!("{:#?}", state);
+    println!("{:?}", state);
 }
 
 /// CALL,CNZ, CZ, CNC, CC, CPO, CPE, CP, CM addr
@@ -1305,7 +1305,6 @@ fn opcode_nop(state: &mut ProcessorState) {
 /// The content of the register pair rp is incremented by
 /// one. Note: No condition flags are affected
 fn opcode_inx(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
-    panic!("In progress!");
     let rp_bits: RPairBitPattern = ((mem_map[state.prog_counter] & 0b00_11_0000) >> 4).into();
     let rp_16 = state.get_rp(rp_bits);
     state.set_rp(rp_16 + 1, rp_bits);
@@ -1319,12 +1318,26 @@ fn opcode_inx(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
 /// instruction.
 fn opcode_jmp(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     // get the address to jump to, needs to be u16 since we shift 8 bits
+    let cur_instruction = mem_map[state.prog_counter];
     let second_byte = mem_map[state.prog_counter + 1];
     let third_byte = mem_map[state.prog_counter + 2];
-
-    // Need to be usize since it's used as an array index
-    let address = two_le_eights_to_one_sixteen(second_byte, third_byte);
-    state.prog_counter = address;
+    let j_type = ((cur_instruction & 0b00_000_111) >> 3);
+    let condition: ConditionBitPattern = ((cur_instruction & 0b00_111_000) >> 3).into();
+    if j_type == 0b011
+        || ((condition == ConditionBitPattern::NZ) && !(state.flags.contains(ConditionFlags::Z)))
+        || ((condition == ConditionBitPattern::Z) && (state.flags.contains(ConditionFlags::Z)))
+        || ((condition == ConditionBitPattern::NC) && !(state.flags.contains(ConditionFlags::CY)))
+        || ((condition == ConditionBitPattern::C) && (state.flags.contains(ConditionFlags::CY)))
+        || ((condition == ConditionBitPattern::PO) && !(state.flags.contains(ConditionFlags::P)))
+        || ((condition == ConditionBitPattern::PE) && (state.flags.contains(ConditionFlags::P)))
+        || ((condition == ConditionBitPattern::P) && !(state.flags.contains(ConditionFlags::S)))
+        || ((condition == ConditionBitPattern::M) && (state.flags.contains(ConditionFlags::S)))
+    {
+        let address = two_le_eights_to_one_sixteen(second_byte, third_byte);
+        state.prog_counter = address;
+    } else {
+        state.prog_counter += 3;
+    }
 }
 
 /// LDAX rp (load accumulator direct)
@@ -1334,7 +1347,8 @@ fn opcode_jmp(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
 /// only register pairs rp=B (registers B and C·) or rp=D
 /// (registers D and E) may be specified.
 fn opcode_ldax(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
-    let rp_bits: RPairBitPattern = ((mem_map[state.prog_counter] & 0b00_11_0000) >> 4).into();
+    let cur_instruction = mem_map[state.prog_counter];
+    let rp_bits: RPairBitPattern = ((cur_instruction & 0b00_11_0000) >> 4).into();
     match rp_bits {
         RPairBitPattern::BC => {
             // register pair B-C
@@ -1422,44 +1436,127 @@ fn opcode_mov(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
         // in pair H-L
         match src {
             // A
-            RegisterBitPattern::A => {}
+            RegisterBitPattern::A => {
+                state.reg_a = mem_map[state.get_rp(RPairBitPattern::HL)];
+            }
             // B
-            RegisterBitPattern::B => {}
+            RegisterBitPattern::B => {
+                state.reg_b = mem_map[state.get_rp(RPairBitPattern::HL)];
+            }
             // C
-            RegisterBitPattern::C => {}
+            RegisterBitPattern::C => {
+                state.reg_c = mem_map[state.get_rp(RPairBitPattern::HL)];
+            }
             // D
-            RegisterBitPattern::D => {}
+            RegisterBitPattern::D => {
+                state.reg_d = mem_map[state.get_rp(RPairBitPattern::HL)];
+            }
             // E
-            RegisterBitPattern::E => {}
+            RegisterBitPattern::E => {
+                state.reg_e = mem_map[state.get_rp(RPairBitPattern::HL)];
+            }
             // H
-            RegisterBitPattern::H => {}
+            RegisterBitPattern::H => {
+                state.reg_h = mem_map[state.get_rp(RPairBitPattern::HL)];
+            }
             // L
-            RegisterBitPattern::L => {}
-            _ => {}
+            RegisterBitPattern::L => {
+                state.reg_l = mem_map[state.get_rp(RPairBitPattern::HL)];
+            }
+            RegisterBitPattern::Other => {
+                panic!("Requested impossible mov operation, mem to mem");
+            }
         }
     } else if src == RegisterBitPattern::Other {
         // then this is a 0 | 1 | D | D | D | 1 | 1 | 0
         // format opcode, use dest
         match dest {
             // A
-            RegisterBitPattern::A => {}
+            RegisterBitPattern::A => {
+                mem_map[state.get_rp(RPairBitPattern::HL)] = state.reg_a;
+            }
             // B
-            RegisterBitPattern::B => {}
+            RegisterBitPattern::B => {
+                mem_map[state.get_rp(RPairBitPattern::HL)] = state.reg_b;
+            }
             // C
-            RegisterBitPattern::C => {}
+            RegisterBitPattern::C => {
+                mem_map[state.get_rp(RPairBitPattern::HL)] = state.reg_c;
+            }
             // D
-            RegisterBitPattern::D => {}
+            RegisterBitPattern::D => {
+                mem_map[state.get_rp(RPairBitPattern::HL)] = state.reg_d;
+            }
             // E
-            RegisterBitPattern::E => {}
+            RegisterBitPattern::E => {
+                mem_map[state.get_rp(RPairBitPattern::HL)] = state.reg_e;
+            }
             // H
-            RegisterBitPattern::H => {}
+            RegisterBitPattern::H => {
+                mem_map[state.get_rp(RPairBitPattern::HL)] = state.reg_h;
+            }
             // L
-            RegisterBitPattern::L => {}
-            _ => {}
+            RegisterBitPattern::L => {
+                mem_map[state.get_rp(RPairBitPattern::HL)] = state.reg_l;
+            }
+            RegisterBitPattern::Other => {
+                panic!("Requested impossible mov operation, mem to mem");
+            }
         }
     } else {
-        panic!("opcode_mov missing proper source or destination register format");
+        let byte_to_move = match src {
+            RegisterBitPattern::A => state.reg_a,
+            // B
+            RegisterBitPattern::B => state.reg_b,
+            // C
+            RegisterBitPattern::C => state.reg_c,
+            // D
+            RegisterBitPattern::D => state.reg_d,
+            // E
+            RegisterBitPattern::E => state.reg_e,
+            // H
+            RegisterBitPattern::H => state.reg_h,
+            // L
+            RegisterBitPattern::L => state.reg_l,
+            RegisterBitPattern::Other => {
+                panic!("Programming error, should have been caught by earlier condition");
+            }
+        };
+        match dest {
+            // A
+            RegisterBitPattern::A => {
+                state.reg_a = byte_to_move;
+            }
+            // B
+            RegisterBitPattern::B => {
+                state.reg_b = byte_to_move;
+            }
+            // C
+            RegisterBitPattern::C => {
+                state.reg_c = byte_to_move;
+            }
+            // D
+            RegisterBitPattern::D => {
+                state.reg_d = byte_to_move;
+            }
+            // E
+            RegisterBitPattern::E => {
+                state.reg_e = byte_to_move;
+            }
+            // H
+            RegisterBitPattern::H => {
+                state.reg_h = byte_to_move;
+            }
+            // L
+            RegisterBitPattern::L => {
+                state.reg_l = byte_to_move;
+            }
+            RegisterBitPattern::Other => {
+                panic!("Programming error should have been caught earlier");
+            }
+        }
     }
+    state.prog_counter += 1;
 }
 
 /// MVI r, data (Move Immediate)
@@ -2134,6 +2231,19 @@ mod tests {
         test_rom[some_rando_address] = 0xff;
         test_state.reg_h = (some_rando_address >> 8) as u8;
         test_state.reg_l = some_rando_address as u8;
+        si_mem.rom = test_rom;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0xff);
+    }
+
+    #[test]
+    fn mov_a_b() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // register pair d-e is 01
+        test_rom[0] = 0b01_111_000;
+        test_state.reg_b = 0xff;
         si_mem.rom = test_rom;
         iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.reg_a, 0xff);
