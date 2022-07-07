@@ -260,6 +260,10 @@ fn get_register_pair_bit_pattern(cur_instruction: u8) -> RPairBitPattern {
     ((cur_instruction & 0b00_11_0000) >> 4).into()
 }
 
+fn get_condition_bit_pattern(cur_instruction: u8) -> ConditionBitPattern {
+    ((cur_instruction & 0b00_111_000) >> 3).into()
+}
+
 /// match statement for operation decoding
 pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     // get the next opcode at the current program counter
@@ -1265,7 +1269,7 @@ fn opcode_call(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     let cur_instruction = mem_map[state.prog_counter];
     let second_byte = mem_map[state.prog_counter + 1];
     let third_byte = mem_map[state.prog_counter + 2];
-    let condition: ConditionBitPattern = ((cur_instruction & 0b00_111_000) >> 3).into();
+    let condition = get_condition_bit_pattern(cur_instruction);
     if (cur_instruction == 0b1100_1101) || state.check_condition(condition) {
         state.push_address(mem_map, state.prog_counter);
         state.prog_counter = two_le_eights_to_one_sixteen(second_byte, third_byte);
@@ -1305,8 +1309,8 @@ fn opcode_jmp(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     let second_byte = mem_map[state.prog_counter + 1];
     let third_byte = mem_map[state.prog_counter + 2];
     // The unconditional form is 0b011 in bit positions 2,1,0
-    let j_type = (cur_instruction & 0b00_000_111) >> 3;
-    let condition: ConditionBitPattern = ((cur_instruction & 0b00_111_000) >> 3).into();
+    let j_type = cur_instruction & 0b00_000_111;
+    let condition = get_condition_bit_pattern(cur_instruction);
     if j_type == 0b011 || state.check_condition(condition) {
         let address = two_le_eights_to_one_sixteen(second_byte, third_byte);
         state.prog_counter = address;
@@ -1703,7 +1707,7 @@ fn opcode_mvi(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
 fn opcode_ret(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     let cur_instruction = mem_map[state.prog_counter];
     let r_type = cur_instruction & 0b00_000_111;
-    let condition: ConditionBitPattern = ((cur_instruction & 0b00_111_000) >> 3).into();
+    let condition = get_condition_bit_pattern(cur_instruction);
     if r_type == 0b001 || state.check_condition(condition) {
         state.prog_counter = state.pop_address(mem_map);
     } else {
@@ -1912,16 +1916,9 @@ mod tests {
         let mut test_state = ProcessorState::new();
         let mut si_mem = SpaceInvadersMemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
-        // insert the jmp instruction
-        test_rom[0] = 0xc3;
-        // last address in the space
-        let test_address: u16 = (test_rom.len() - 1) as u16;
-        // putting something easy to recognize at the end
-        test_rom[test_address as usize] = 0xff;
-        // insert address in bytes 1 and 2 in little endian byte order
-        // we are explicitly truncating the bits by masking off as u8 here
-        // the high order bits and casting as u8
-        test_rom[1] = (test_address & 0b0000_0000_1111_1111) as u8;
+        test_rom[0] = 0b1100_0011;
+        let test_address: u16 = 0x0020;
+        test_rom[1] = test_address as u8;
         test_rom[2] = (test_address >> 8) as u8;
         si_mem.rom = test_rom;
         iterate_processor_state(&mut test_state, &mut si_mem);
