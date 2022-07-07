@@ -1,7 +1,3 @@
-// Todo: take these warning blockers out
-#![allow(unreachable_code)]
-#![allow(unused)]
-
 use bitflags::bitflags;
 use std::convert::From;
 use std::{
@@ -76,9 +72,6 @@ impl ProcessorState {
             RPairBitPattern::SP => {
                 self.stack_pointer = data;
             }
-            _ => {
-                panic!("incorrect register pair bits sent to ProcessorState.set_rp()")
-            }
         }
     }
 
@@ -89,9 +82,6 @@ impl ProcessorState {
             RPairBitPattern::DE => two_le_eights_to_one_sixteen(self.reg_e, self.reg_d),
             RPairBitPattern::HL => two_le_eights_to_one_sixteen(self.reg_l, self.reg_h),
             RPairBitPattern::SP => self.stack_pointer,
-            _ => {
-                panic!("incorrect register pair bits sent to ProcessorState.get_rp()")
-            }
         }
     }
 
@@ -117,7 +107,7 @@ impl ProcessorState {
     }
 
     pub fn pop_byte(&mut self, mem_map: &mut SpaceInvadersMemMap) -> u8 {
-        let mut this_data = mem_map[self.stack_pointer];
+        let this_data = mem_map[self.stack_pointer];
         self.stack_pointer += 1;
         this_data
     }
@@ -142,6 +132,8 @@ pub struct SpaceInvadersMemMap {
 }
 
 impl SpaceInvadersMemMap {
+    // Todo: Replace space invaders specific memory layout with
+    // configurable map.
     pub fn new() -> Self {
         SpaceInvadersMemMap {
             rom: space_invaders_rom::SPACE_INVADERS_ROM,
@@ -151,6 +143,8 @@ impl SpaceInvadersMemMap {
 }
 
 impl Index<u16> for SpaceInvadersMemMap {
+    // Todo: Replace space invaders specific memory layout with
+    // configurable map.
     type Output = u8;
     fn index(&self, idx: u16) -> &Self::Output {
         if idx < (space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) {
@@ -163,6 +157,8 @@ impl Index<u16> for SpaceInvadersMemMap {
 }
 
 impl IndexMut<u16> for SpaceInvadersMemMap {
+    // Todo: Replace space invaders specific memory layout with
+    // configurable map.
     fn index_mut(&mut self, idx: u16) -> &mut Self::Output {
         if idx < (space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) {
             if cfg!(test) {
@@ -1024,7 +1020,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             opcode_ret(state, mem_map);
         }
         0xc1 => {
-	    opcode_pop(state,mem_map);
+            opcode_pop(state, mem_map);
         }
         0xc2 => {
             opcode_jmp(state, mem_map);
@@ -1078,7 +1074,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             opcode_ret(state, mem_map);
         }
         0xd1 => {
-	    opcode_pop(state,mem_map);	    
+            opcode_pop(state, mem_map);
         }
         0xd2 => {
             opcode_jmp(state, mem_map);
@@ -1134,7 +1130,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             opcode_ret(state, mem_map);
         }
         0xe1 => {
-	    opcode_pop(state,mem_map);	    
+            opcode_pop(state, mem_map);
         }
         0xe2 => {
             opcode_jmp(state, mem_map);
@@ -1189,7 +1185,8 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             opcode_ret(state, mem_map);
         }
         0xf1 => {
-	    opcode_pop(state,mem_map);	            }
+            opcode_pop(state, mem_map);
+        }
         0xf2 => {
             opcode_jmp(state, mem_map);
             // 3
@@ -1312,7 +1309,7 @@ fn opcode_jmp(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     let second_byte = mem_map[state.prog_counter + 1];
     let third_byte = mem_map[state.prog_counter + 2];
     // The unconditional form is 0b011 in bit positions 2,1,0
-    let j_type = ((cur_instruction & 0b00_000_111) >> 3);
+    let j_type = (cur_instruction & 0b00_000_111) >> 3;
     let condition: ConditionBitPattern = ((cur_instruction & 0b00_111_000) >> 3).into();
     if j_type == 0b011 || state.check_condition(condition) {
         let address = two_le_eights_to_one_sixteen(second_byte, third_byte);
@@ -1387,9 +1384,6 @@ fn opcode_lxi(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
         RPairBitPattern::SP => {
             // register SP
             state.stack_pointer = (third_byte as u16) << 8 | (second_byte as u16);
-        }
-        _ => {
-            panic!("unhandled register pair bits in opcode_lxi");
         }
     }
 }
@@ -1614,7 +1608,7 @@ fn opcode_mvi(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
 /// by 2.
 fn opcode_ret(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     let cur_instruction = mem_map[state.prog_counter];
-    let r_type = (cur_instruction & 0b00_000_111);
+    let r_type = cur_instruction & 0b00_000_111;
     let condition: ConditionBitPattern = ((cur_instruction & 0b00_111_000) >> 3).into();
     if r_type == 0b001 || state.check_condition(condition) {
         state.prog_counter = state.pop_address(mem_map);
@@ -1654,7 +1648,7 @@ fn opcode_rst(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
 /// The content of register H is moved to the high-order
 /// eight bits of register PC. The content of register l is
 /// moved to the low-order eight bits of register PC.
-fn opcode_pchl(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
+fn opcode_pchl(state: &mut ProcessorState, _mem_map: &mut SpaceInvadersMemMap) {
     state.prog_counter = state.get_rp(RPairBitPattern::HL);
 }
 
@@ -1712,7 +1706,7 @@ fn opcode_push(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
 /// rp =SP may not be specified
 fn opcode_pop(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     let cur_instruction = mem_map[state.prog_counter];
-    let rpair: RPairBitPattern = (cur_instruction & 0b00_11_0000).into();
+    let rpair: RPairBitPattern = ((cur_instruction & 0b00_11_0000) >> 4).into();
     match rpair {
         RPairBitPattern::BC => {
             let this_data = state.pop_address(mem_map);
@@ -1737,6 +1731,9 @@ fn opcode_pop(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
 
     state.prog_counter += 1;
 }
+
+// Todo: swap out register pair register condition flag and other bit twiddling
+// and masking with functions.
 
 // Todo: remove extra match branches in the iterate state function
 // since most of these opcodes use bits in the instruction to determine
@@ -2554,17 +2551,28 @@ mod tests {
         test_rom[1] = 0b11_11_0001;
         let original_stack_pointer = test_state.stack_pointer;
 
-        panic!("Fix this test");
-        // Todo: need to set accumulator and flags and then check them
+        test_state.reg_a = 0xfe;
+        test_state.flags.set(ConditionFlags::Z, true);
+        test_state.flags.set(ConditionFlags::CY, true);
+        test_state.flags.set(ConditionFlags::S, true);
 
+        let mut test_flags = ConditionFlags {
+            bits: (0b0000_0000),
+        };
+        test_flags.set(ConditionFlags::Z, true);
+        test_flags.set(ConditionFlags::CY, true);
+        test_flags.set(ConditionFlags::S, true);
         si_mem.rom = test_rom;
         iterate_processor_state(&mut test_state, &mut si_mem);
 
         assert_ne!(original_stack_pointer, test_state.stack_pointer);
-        test_state.reg_b = 0;
-        test_state.reg_c = 0;
+        test_state.reg_a = 0;
+        test_state.flags = ConditionFlags {
+            bits: (0b0000_0000),
+        };
         iterate_processor_state(&mut test_state, &mut si_mem);
-        assert_eq!(test_state.get_rp(RPairBitPattern::BC), 0xfffe);
+        assert_eq!(test_state.reg_a, 0xfe);
+        assert_eq!(test_state.flags, test_flags);
         assert_eq!(original_stack_pointer, test_state.stack_pointer);
     }
 }
