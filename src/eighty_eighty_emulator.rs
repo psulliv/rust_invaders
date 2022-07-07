@@ -85,20 +85,20 @@ impl ProcessorState {
         }
     }
 
-    // Pushes an address to the stack
+    /// Pushes an address to the stack
     pub fn push_address(&mut self, mem_map: &mut SpaceInvadersMemMap, address: u16) {
         mem_map[self.stack_pointer - 1] = ((address) >> 8) as u8;
         mem_map[self.stack_pointer - 2] = address as u8;
         self.stack_pointer -= 2;
     }
 
-    // Push one byte
+    /// Push one byte to the stack
     pub fn push_byte(&mut self, mem_map: &mut SpaceInvadersMemMap, this_data: u8) {
         mem_map[self.stack_pointer - 1] = this_data;
         self.stack_pointer -= 1;
     }
 
-    // Pops an address from the stack
+    /// Pops an address from the stack
     pub fn pop_address(&mut self, mem_map: &mut SpaceInvadersMemMap) -> u16 {
         let mut address = (mem_map[self.stack_pointer + 1] as u16) << 8;
         address |= mem_map[self.stack_pointer] as u16;
@@ -106,12 +106,14 @@ impl ProcessorState {
         address
     }
 
+    /// Pop one byte from the stack
     pub fn pop_byte(&mut self, mem_map: &mut SpaceInvadersMemMap) -> u8 {
         let this_data = mem_map[self.stack_pointer];
         self.stack_pointer += 1;
         this_data
     }
 
+    /// Checks an instruction's condition mode against the condition flags
     pub fn check_condition(&self, condition: ConditionBitPattern) -> bool {
         match condition {
             ConditionBitPattern::NZ => !(self.flags.contains(ConditionFlags::Z)),
@@ -256,11 +258,23 @@ fn two_le_eights_to_one_sixteen(first_byte: u8, second_byte: u8) -> u16 {
     (second_byte as u16) << 8 | first_byte as u16
 }
 
+/// returns the register pair specified by bits 5 and 4.
 fn get_register_pair_bit_pattern(cur_instruction: u8) -> RPairBitPattern {
     ((cur_instruction & 0b00_11_0000) >> 4).into()
 }
 
+/// returns the condition mode specified by bits 5, 4, and 3
 fn get_condition_bit_pattern(cur_instruction: u8) -> ConditionBitPattern {
+    ((cur_instruction & 0b00_111_000) >> 3).into()
+}
+
+/// returns register bits defined by bits 2,1, and 0
+fn get_source_register_bit_pattern(cur_instruction: u8) -> RegisterBitPattern {
+    (cur_instruction & 0b00_000_111).into()
+}
+
+/// returns register bits defined by bits 5, 4, and 3
+fn get_destination_register_bit_pattern(cur_instruction: u8) -> RegisterBitPattern {
     ((cur_instruction & 0b00_111_000) >> 3).into()
 }
 
@@ -1502,8 +1516,8 @@ fn opcode_mov(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     // test to see if this is a move to or from memory
 
     let cur_instruction = mem_map[state.prog_counter];
-    let dest: RegisterBitPattern = ((cur_instruction & 0b00_111_000) >> 3).into();
-    let src: RegisterBitPattern = (cur_instruction & 0b00_000_111).into();
+    let dest = get_destination_register_bit_pattern(cur_instruction);
+    let src = get_source_register_bit_pattern(cur_instruction);
     if dest == RegisterBitPattern::Other {
         // then this is a 0 | 1 | 1 | 1 | 0 | S | S | S
         // format opcode and moving from `src` to memory
@@ -1649,7 +1663,7 @@ fn opcode_mvi(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     // 0 | 0 | 1 | 1 | 0 | 1 | 1 | 0
     // ^^^ move to memory immediate
     let cur_instruction = mem_map[state.prog_counter];
-    let dest: RegisterBitPattern = ((cur_instruction & 0b00_111_000) >> 3).into();
+    let dest = get_destination_register_bit_pattern(cur_instruction);
     let second_byte = mem_map[state.prog_counter + 1];
     state.prog_counter += 2;
     match dest {
@@ -1810,7 +1824,7 @@ fn opcode_pop(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
             state.set_rp(this_data, RPairBitPattern::HL)
         }
         RPairBitPattern::SP => {
-            // Not really SP this is used for pushing the condition flags
+            // Not really SP this is used for popping the condition flags and accumulator
             let the_flags = state.pop_byte(mem_map);
             state.flags = ConditionFlags { bits: (the_flags) };
             let the_accumulator = state.pop_byte(mem_map);
