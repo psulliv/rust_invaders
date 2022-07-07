@@ -1034,8 +1034,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 2
         }
         0xc7 => {
-            panic!(" 	RST 0	1		CALL $0");
-            // 1
+            opcode_rst(state, mem_map);
         }
         0xc8 => {
             opcode_ret(state, mem_map);
@@ -1063,8 +1062,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 2
         }
         0xcf => {
-            panic!(" 	RST 1	1		CALL $8");
-            // 1
+            opcode_rst(state, mem_map);
         }
         0xd0 => {
             opcode_ret(state, mem_map);
@@ -1093,8 +1091,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 2
         }
         0xd7 => {
-            panic!(" 	RST 2	1		CALL $10");
-            // 1
+            opcode_rst(state, mem_map);
         }
         0xd8 => {
             opcode_ret(state, mem_map);
@@ -1123,8 +1120,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 2
         }
         0xdf => {
-            panic!(" 	RST 3	1		CALL $18");
-            // 1
+            opcode_rst(state, mem_map);
         }
         0xe0 => {
             opcode_ret(state, mem_map);
@@ -1153,8 +1149,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 2
         }
         0xe7 => {
-            panic!(" 	RST 4	1		CALL $20");
-            // 1
+            opcode_rst(state, mem_map);
         }
         0xe8 => {
             opcode_ret(state, mem_map);
@@ -1183,8 +1178,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 2
         }
         0xef => {
-            panic!(" 	RST 5	1		CALL $28");
-            // 1
+            opcode_rst(state, mem_map);
         }
         0xf0 => {
             opcode_ret(state, mem_map);
@@ -1213,8 +1207,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 2
         }
         0xf7 => {
-            panic!(" 	RST 6	1		CALL $30");
-            // 1
+            opcode_rst(state, mem_map);
         }
         0xf8 => {
             opcode_ret(state, mem_map);
@@ -1243,8 +1236,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 2
         }
         0xff => {
-            panic!(" 	RST 7	1		CALL $38");
-            // 1
+            opcode_rst(state, mem_map);
         }
     };
     println!("{:?}", state);
@@ -1627,6 +1619,31 @@ fn opcode_ret(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     } else {
         state.prog_counter += 1;
     }
+}
+
+/// RST n (Restart)
+/// ((SP) - 1) ~ (PCH)
+/// ((SP) - 2) ~ (PCl)
+/// (SP) ~ (SP) - 2
+/// (PC) ~ 8* (NNN)
+/// The high-order eight bits of the next instruction ad-
+/// dress are moved to the memory location whose
+/// address is one less than the content of register SP.
+/// The low-order eight bits of the next instruction ad-
+/// dress are moved to the memory location whose
+/// address is two less than the content of register SP.
+/// The content of register SP is decremented by two.
+/// Control is transferred to the instruction whose ad-
+/// dress is eight times the content of NNN.
+fn opcode_rst(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
+    let cur_instruction = mem_map[state.prog_counter];
+
+    // kind of lazy but the call address is essentially this mask on the
+    // instruction, it's really NNN * 8, buts that really a 3 bit left
+    // shift and it's already three bits to the left if you mask it.
+    let rst_address = (cur_instruction & 0b00_111_000) as u16;
+    state.push_address(mem_map, state.prog_counter);
+    state.prog_counter = rst_address;
 }
 
 // Todo: remove extra match branches in the iterate state function
@@ -2322,12 +2339,46 @@ mod tests {
         let mut test_state = ProcessorState::new();
         let mut si_mem = SpaceInvadersMemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
-
+        let original_stack_pointer = test_state.stack_pointer;
         test_rom[0] = 0b11_001_001;
         si_mem.rom = test_rom;
         test_state.push_address(&mut si_mem, 0x0020);
         assert_ne!(0x0020, test_state.prog_counter);
+        assert_ne!(original_stack_pointer, test_state.stack_pointer);
         iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(0x0020, test_state.prog_counter);
+        assert_eq!(original_stack_pointer, test_state.stack_pointer);
+    }
+
+    #[test]
+    fn rz() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+
+        test_rom[0] = 0b11_001_000;
+        si_mem.rom = test_rom;
+        test_state.push_address(&mut si_mem, 0x0020);
+        test_state.flags.set(ConditionFlags::Z, false);
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_ne!(0x0020, test_state.prog_counter);
+        test_state.prog_counter = 0;
+        test_state.flags.set(ConditionFlags::Z, true);
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(0x0020, test_state.prog_counter);
+    }
+
+    #[test]
+    fn rst() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+
+        // RST to location 001, address 1000;
+        test_rom[0] = 0b11_001_111;
+        si_mem.rom = test_rom;
+        assert_ne!(0b1000, test_state.prog_counter);
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(0b1000, test_state.prog_counter);
     }
 }
