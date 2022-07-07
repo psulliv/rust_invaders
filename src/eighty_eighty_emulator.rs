@@ -482,8 +482,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0x3a => {
-            panic!(" 	LDA adr	3		A <- (adr)");
-            // 3
+            opcode_lda(state, mem_map);
         }
         0x3b => {
             panic!(" 	DCX SP	1		SP = SP-1");
@@ -1384,6 +1383,18 @@ fn opcode_lxi(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
             state.stack_pointer = (third_byte as u16) << 8 | (second_byte as u16);
         }
     }
+}
+
+/// LOA addr (Load Accumulator direct)
+/// (A) ~ ((byte 3) (byte 2))
+/// The content of the memory location, whose address
+/// is specified in byte 2 and byte 3 of the instruction, is
+/// moved to register A.
+fn opcode_lda(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
+    let second_byte = mem_map[state.prog_counter + 1];
+    let third_byte = mem_map[state.prog_counter + 2];
+    state.reg_a = mem_map[two_le_eights_to_one_sixteen(second_byte, third_byte)];
+    state.prog_counter += 3;
 }
 
 /// MOV r, M (Move from memory)
@@ -2638,5 +2649,24 @@ mod tests {
             test_state.get_rp(RPairBitPattern::HL),
             test_state.stack_pointer
         );
+    }
+
+    #[test]
+    fn lda() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+
+        test_rom[0] = 0b00_111_010;
+        let some_address: u16 = 0x1337;
+
+        test_rom[1] = some_address as u8;
+        test_rom[2] = (some_address >> 8) as u8;
+        si_mem.rom = test_rom;
+        si_mem[some_address] = 0xfe;
+
+        assert_ne!(test_state.reg_a, 0xfe);
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0xfe);
     }
 }
