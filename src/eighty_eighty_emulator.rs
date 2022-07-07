@@ -1009,8 +1009,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0xc0 => {
-            panic!(" 	RNZ	1		if NZ, RET");
-            // 1
+            opcode_ret(state, mem_map);
         }
         0xc1 => {
             panic!(" 	POP B	1		C <- (sp); B <- (sp+1); sp <- sp+2");
@@ -1039,11 +1038,10 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0xc8 => {
-            panic!(" 	RZ	1		if Z, RET");
-            // 1
+            opcode_ret(state, mem_map);
         }
         0xc9 => {
-            panic!(" 	RET	1		PC.lo <- (sp); PC.hi<-(sp+1); SP <- SP+2");
+            opcode_ret(state, mem_map);
             // 1
         }
         0xca => {
@@ -1069,8 +1067,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0xd0 => {
-            panic!(" 	RNC	1		if NCY, RET");
-            // 1
+            opcode_ret(state, mem_map);
         }
         0xd1 => {
             panic!(" 	POP D	1		E <- (sp); D <- (sp+1); sp <- sp+2");
@@ -1100,8 +1097,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0xd8 => {
-            panic!(" 	RC	1		if CY, RET");
-            // 1
+            opcode_ret(state, mem_map);
         }
         0xd9 => {
             panic!(" 	-			");
@@ -1131,8 +1127,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0xe0 => {
-            panic!(" 	RPO	1		if PO, RET");
-            // 1
+            opcode_ret(state, mem_map);
         }
         0xe1 => {
             panic!(" 	POP H	1		L <- (sp); H <- (sp+1); sp <- sp+2");
@@ -1162,8 +1157,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0xe8 => {
-            panic!(" 	RPE	1		if PE, RET");
-            // 1
+            opcode_ret(state, mem_map);
         }
         0xe9 => {
             panic!(" 	PCHL	1		PC.hi <- H; PC.lo <- L");
@@ -1193,8 +1187,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0xf0 => {
-            panic!(" 	RP	1		if P, RET");
-            // 1
+            opcode_ret(state, mem_map);
         }
         0xf1 => {
             panic!(" 	POP PSW	1		flags <- (sp); A <- (sp+1); sp <- sp+2");
@@ -1224,8 +1217,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0xf8 => {
-            panic!(" 	RM	1		if M, RET");
-            // 1
+            opcode_ret(state, mem_map);
         }
         0xf9 => {
             panic!(" 	SPHL	1		SP=HL");
@@ -1615,6 +1607,28 @@ fn opcode_mvi(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     }
 }
 
+/// RET (Return)
+/// (PCl) ~ ((SP));
+/// (PCH) ~ ((SP) + 1);
+/// (SP) ~ (SP) + 2;
+/// The content of the memory location whose address
+/// is specified in register SP is moved to the low-order
+/// eight bits of register PC. The content of the memory
+/// location whose address is one more than the content
+/// of register SP is moved to the high-order eight bits of
+/// register PC. The content of register SP is incremented
+/// by 2.
+fn opcode_ret(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
+    let cur_instruction = mem_map[state.prog_counter];
+    let r_type = (cur_instruction & 0b00_000_111);
+    let condition: ConditionBitPattern = ((cur_instruction & 0b00_111_000) >> 3).into();
+    if r_type == 0b001 || state.check_condition(condition) {
+        state.prog_counter = state.pop_address(mem_map);
+    } else {
+        state.prog_counter += 1;
+    }
+}
+
 // Todo: remove extra match branches in the iterate state function
 // since most of these opcodes use bits in the instruction to determine
 // register source and destinations this can be pared down to many fewer
@@ -1640,20 +1654,15 @@ fn opcode_mvi(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
 // since we couldn't really take a ROM input given our platform of web assembly but
 // that can certainly be a stretch goal.
 
-// Todo: replace bare binary and hex values with enums that make sense. Probably enums
-// for the register and register pair values at least, maybe so far as consts for the
-// masking bits. replacing the match statement in the iterate_processor_state call
-// may not be possible but it could be reasonable if every piece has a From trait
-// implemented. One of the problems is that making an opcode enum From trait implementation
-// is that a lot of this stuff has multiple bytes involved.
-
 // Todo: replace the panics with Err valuse that aggregate into a good error message at a single
 // panic! near the top and handle the errors that can be handled. Most of this shouldn't be
 // able to be handled though since there aren't external deps, disk usage, network
 // usage, additional threads to contend, or even memory usage outside the initial allocations.
 
-// Todo: split the conditional logic portions, like condition type == condition flag bit set
-// into a separate function, especially for those giant boolean blobs in the branch instructions
+// somehow integrate memory layout and configuration into the processor state, maybe add
+// them under an overarching machine state? Maybe just integrate the `emulate_loop`
+// `iterate_state` and whatnot with a struct and method but leave the underlying impl
+// imperative?
 
 #[cfg(test)]
 mod tests {
@@ -2306,5 +2315,19 @@ mod tests {
         si_mem.rom = test_rom;
         iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.reg_a, 0xff);
+    }
+
+    #[test]
+    fn ret_uncon() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+
+        test_rom[0] = 0b11_001_001;
+        si_mem.rom = test_rom;
+        test_state.push_address(&mut si_mem, 0x0020);
+        assert_ne!(0x0020, test_state.prog_counter);
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(0x0020, test_state.prog_counter);
     }
 }
