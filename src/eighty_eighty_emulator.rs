@@ -622,7 +622,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0x87 => {
-            panic!(" 	ADD A	1	Z, S, P, CY, AC	A <- A + A");
+            opcode_add(state, mem_map);
             // 1
         }
         0x88 => {
@@ -1650,5 +1650,18 @@ mod tests {
         si_mem.rom = test_rom;
         let address = iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.prog_counter, 2);
+    }
+
+    #[test]
+    fn add_step_reg_a() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // 111 is A
+        test_rom[0] = 0b10_000_110 | (0b111);
+        si_mem.rom = test_rom;
+        test_state.reg_a = 0b1111_1111;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0b1111_1110);
     }
 }
