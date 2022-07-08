@@ -3,7 +3,7 @@
 #![allow(unused)]
 
 use bitflags::bitflags;
-use std::ops::{Index, IndexMut};
+use std::ops::{Index, IndexMut, BitOrAssign};
 
 use crate::space_invaders_rom;
 
@@ -1306,6 +1306,82 @@ fn opcode_mvi(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     }
 }
 
+/// ADD r (Add Register)
+/// (A) ~ (A) + (r)
+/// The content of register r is added to the content of
+/// the accumulator. The result is placed in the accumulator.
+/// ADD M (Add memory)
+/// (A) ~ (A) + ((H) (L))
+/// The content of the memory location whose address is
+/// contained in the H and L registers is added to the 
+/// content of the accumulator. The result is placed in the
+/// accumulator.
+fn opcode_add(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
+    // 1 | 0 | 0 | 0 | 0 | S | S | S
+    // or
+    // 1 | 0 | 0 | 0 | 0 | 1 | 1 | 0
+
+    // Test to see if this is an addition from memory or
+    // a register.
+
+    let cur_instruction = mem_map[state.prog_counter];
+    let src = cur_instruction & 0b00_000_111;
+    let mut addend: u8 = 0;
+    let accumulator_bit_three = (state.reg_a & 0b0000_1000) >> 3;
+
+    if src == 0b110 {
+        // Then this is a 1 | 0 | 0 | 0 | 0 | 1 | 1 | 0
+        // format opcode adding value located at the
+        // memory address in pair H-L to accumulator.
+        let addr: usize = ((state.reg_h << 4) + state.reg_l).into();
+        addend = mem_map[addr];
+    }
+    else {
+        // Then this is a 1 | 0 | 0 | 0 | 0 | S | S | S
+        // format opcode, adding register value to accumulator.
+        match src {
+            // A
+            0b111 => {addend = state.reg_a;}
+            // B
+            0b000 => {addend = state.reg_b;}
+            // C
+            0b001 => {addend = state.reg_c;}
+            // D
+            0b010 => {addend = state.reg_d;}
+            // E
+            0b011 => {addend = state.reg_e;}
+            // H
+            0b100 => {addend = state.reg_h;}
+            // L
+            0b101 => {addend = state.reg_l;}
+            _ => {}
+        }
+
+        // Perform addition, move sum into accumulator.
+        let (sum, overflow) = state.reg_a.overflowing_add(addend);
+        state.reg_a = sum;
+
+        // Clear all flags affected by ADD instruction, then set flags as needed.
+        state.flags &= !ConditionFlags::Z & !ConditionFlags::S & !ConditionFlags::P & !ConditionFlags::CY & !ConditionFlags::AC;
+        if state.reg_a == 0 {
+            state.flags |= ConditionFlags::Z;
+        }
+        if (state.reg_a & 0b1000_0000) >> 7 == 1 {
+            state.flags |= ConditionFlags::S;
+        }
+        if state.reg_a.count_ones() % 2 == 0 {
+            state.flags |= ConditionFlags::P;
+        }
+        if overflow {
+            state.flags |= ConditionFlags::CY;
+        }
+        if accumulator_bit_three == 1 && (addend & (0b0000_1000 >> 3) == 1) {
+            state.flags |= ConditionFlags::AC;
+        }
+    }
+
+}
+
 // DDD or SSS REGISTER NAME
 // 111 A
 // 000 B
@@ -1576,4 +1652,3 @@ mod tests {
         assert_eq!(test_state.prog_counter, 2);
     }
 }
-     
