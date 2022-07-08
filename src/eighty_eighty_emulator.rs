@@ -1327,13 +1327,12 @@ fn opcode_add(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     let cur_instruction = mem_map[state.prog_counter];
     let src = cur_instruction & 0b00_000_111;
     let mut addend: u8 = 0;
-    let accumulator_bit_three = (state.reg_a & 0b0000_1000) >> 3;
 
     if src == 0b110 {
         // Then this is a 1 | 0 | 0 | 0 | 0 | 1 | 1 | 0
         // format opcode adding value located at the
         // memory address in pair H-L to accumulator.
-        let addr: usize = ((state.reg_h << 4) + state.reg_l).into();
+        let addr: usize = (((state.reg_h as u16) << 8) + state.reg_l as u16).into();
         addend = mem_map[addr];
     }
     else {
@@ -1357,6 +1356,9 @@ fn opcode_add(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
             _ => {}
         }
 
+        // Add first four bits to detect carry to fifth.
+        let low_add = (state.reg_a & 0b0000_1111) + (addend & 0b0000_1111);
+
         // Perform addition, move sum into accumulator.
         let (sum, overflow) = state.reg_a.overflowing_add(addend);
         state.reg_a = sum;
@@ -1375,7 +1377,7 @@ fn opcode_add(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
         if overflow {
             state.flags |= ConditionFlags::CY;
         }
-        if accumulator_bit_three == 1 && (addend & (0b0000_1000 >> 3) == 1) {
+        if low_add & 0b0001_0000 != 0 {
             state.flags |= ConditionFlags::AC;
         }
     }
@@ -1663,5 +1665,6 @@ mod tests {
         test_state.reg_a = 0b1111_1111;
         iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.reg_a, 0b1111_1110);
+        assert_eq!(test_state.flags, ConditionFlags::CY | ConditionFlags::S | ConditionFlags::AC)
     }
 }
