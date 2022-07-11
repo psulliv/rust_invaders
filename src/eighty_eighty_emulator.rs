@@ -1,15 +1,11 @@
 #![allow(clippy::unusual_byte_groupings)]
 use bitflags::bitflags;
-<<<<<<< HEAD
-use std::ops::{Index, IndexMut, BitOrAssign};
-=======
 use std::convert::From;
 use std::mem;
 use std::{
     fmt::Debug,
     ops::{Index, IndexMut},
 };
->>>>>>> master
 
 use crate::{debug_utils::debug_print_op_code, space_invaders_rom};
 
@@ -781,7 +777,6 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut MemMap)
             // 1
         }
         0x80 => {
-<<<<<<< HEAD
             opcode_add(state, mem_map);
             // 1
         }
@@ -811,37 +806,6 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut MemMap)
         }
         0x87 => {
             opcode_add(state, mem_map);
-=======
-            panic!("    ADD B   1       Z, S, P, CY, AC A <- A + B");
-            // 1
-        }
-        0x81 => {
-            panic!("    ADD C   1       Z, S, P, CY, AC A <- A + C");
-            // 1
-        }
-        0x82 => {
-            panic!("    ADD D   1       Z, S, P, CY, AC A <- A + D");
-            // 1
-        }
-        0x83 => {
-            panic!("    ADD E   1       Z, S, P, CY, AC A <- A + E");
-            // 1
-        }
-        0x84 => {
-            panic!("    ADD H   1       Z, S, P, CY, AC A <- A + H");
-            // 1
-        }
-        0x85 => {
-            panic!("    ADD L   1       Z, S, P, CY, AC A <- A + L");
-            // 1
-        }
-        0x86 => {
-            panic!("    ADD M   1       Z, S, P, CY, AC A <- A + (HL)");
-            // 1
-        }
-        0x87 => {
-            panic!("    ADD A   1       Z, S, P, CY, AC A <- A + A");
->>>>>>> master
             // 1
         }
         0x88 => {
@@ -1088,11 +1052,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut MemMap)
             opcode_push(state, mem_map);
         }
         0xc6 => {
-<<<<<<< HEAD
             opcode_adi(state, mem_map);
-=======
-            panic!("    ADI D8  2       Z, S, P, CY, AC A <- A + byte");
->>>>>>> master
             // 2
         }
         0xc7 => {
@@ -1703,7 +1663,6 @@ fn opcode_mvi(state: &mut ProcessorState, mem_map: &mut MemMap) {
     }
 }
 
-<<<<<<< HEAD
 /// ADD r (Add Register)
 /// (A) ~ (A) + (r)
 /// The content of register r is added to the content of
@@ -1714,42 +1673,47 @@ fn opcode_mvi(state: &mut ProcessorState, mem_map: &mut MemMap) {
 /// contained in the H and L registers is added to the 
 /// content of the accumulator. The result is placed in the
 /// accumulator.
-fn opcode_add(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
+fn opcode_add(state: &mut ProcessorState, mem_map: &mut MemMap) {
     // 1 | 0 | 0 | 0 | 0 | S | S | S
     // or
     // 1 | 0 | 0 | 0 | 0 | 1 | 1 | 0
 
     let cur_instruction = mem_map[state.prog_counter];
-    let src = cur_instruction & 0b00_000_111;
+    let src = get_source_register_bit_pattern(cur_instruction);
     state.prog_counter += 1;
-    let mut addend: u8 = 0;
+    let addend: u8;
 
     match src {
-        0b110 => {
+        RegisterBitPattern::Other => {
             // Then this is a 1 | 0 | 0 | 0 | 0 | 1 | 1 | 0
             // format opcode adding value located at the
             // memory address in pair H-L to accumulator.
-            let addr: usize = (((state.reg_h as u16) << 8) + state.reg_l as u16).into();
+            let addr = state.get_rp(RPairBitPattern::HL);
             addend = mem_map[addr];
         }
         // Then this is a 1 | 0 | 0 | 0 | 0 | S | S | S
         // format opcode, adding register value to accumulator.
-        // A
-        0b111 => {addend = state.reg_a;}
-        // B
-        0b000 => {addend = state.reg_b;}
-        // C
-        0b001 => {addend = state.reg_c;}
-        // D
-        0b010 => {addend = state.reg_d;}
-        // E
-        0b011 => {addend = state.reg_e;}
-        // H
-        0b100 => {addend = state.reg_h;}
-        // L
-        0b101 => {addend = state.reg_l;}
-        // Invalid Source
-        _ => {panic!("invalid register bits in opcode_add");}
+        RegisterBitPattern::A => {
+            addend = state.reg_a;
+        }
+        RegisterBitPattern::B => {
+            addend = state.reg_b;
+        }
+        RegisterBitPattern::C => {
+            addend = state.reg_c;
+        }
+        RegisterBitPattern::D => {
+            addend = state.reg_d;
+        }
+        RegisterBitPattern::E => {
+            addend = state.reg_e;
+        }
+        RegisterBitPattern::H => {
+            addend = state.reg_h;
+        }
+        RegisterBitPattern::L => {
+            addend = state.reg_l;
+        }
     }
 
     // Add first four bits to detect carry to fifth.
@@ -1784,7 +1748,7 @@ fn opcode_add(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
 /// The content of the second byte of the instruction is
 /// added to the content of the accumulator. The result
 /// is placed in the accumulator.
-fn opcode_adi(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
+fn opcode_adi(state: &mut ProcessorState, mem_map: &mut MemMap) {
     // 1 | 1 | 0 | 0 | 0 | 1 | 1 | 0
 
     let second_byte = mem_map[state.prog_counter + 1];
@@ -1831,7 +1795,6 @@ fn opcode_adi(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
 // 01 D-E
 // 10 H-L
 // 11 SP (not really a pair)
-=======
 /// RET (Return)
 /// (PCl) ~ ((SP));
 /// (PCH) ~ ((SP) + 1);
@@ -1853,7 +1816,6 @@ fn opcode_ret(state: &mut ProcessorState, mem_map: &mut MemMap) {
         state.prog_counter += 1;
     }
 }
->>>>>>> master
 
 /// RST n (Restart)
 /// ((SP) - 1) ~ (PCH)
@@ -2322,10 +2284,9 @@ mod tests {
     }
 
     #[test]
-<<<<<<< HEAD
     fn add_step_reg_a() {
         let mut test_state = ProcessorState::new();
-        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut si_mem = MemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
         // 111 is A
         test_rom[0] = 0b10_000_000 | (0b111);
@@ -2339,7 +2300,7 @@ mod tests {
     #[test]
     fn add_step_reg_b() {
         let mut test_state = ProcessorState::new();
-        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut si_mem = MemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
         // 000 is B
         test_rom[0] = 0b10_000_000 | (0b000);
@@ -2354,7 +2315,7 @@ mod tests {
     #[test]
     fn add_step_reg_c() {
         let mut test_state = ProcessorState::new();
-        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut si_mem = MemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
         // 001 is C
         test_rom[0] = 0b10_000_000 | (0b001);
@@ -2369,7 +2330,7 @@ mod tests {
     #[test]
     fn add_step_reg_d() {
         let mut test_state = ProcessorState::new();
-        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut si_mem = MemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
         // 010 is D
         test_rom[0] = 0b10_000_000 | (0b010);
@@ -2384,7 +2345,7 @@ mod tests {
     #[test]
     fn add_step_reg_e() {
         let mut test_state = ProcessorState::new();
-        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut si_mem = MemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
         // 011 is E
         test_rom[0] = 0b10_000_000 | (0b011);
@@ -2399,7 +2360,7 @@ mod tests {
     #[test]
     fn add_step_reg_h() {
         let mut test_state = ProcessorState::new();
-        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut si_mem = MemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
         // 100 is H
         test_rom[0] = 0b10_000_000 | (0b100);
@@ -2414,7 +2375,7 @@ mod tests {
     #[test]
     fn add_step_reg_l() {
         let mut test_state = ProcessorState::new();
-        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut si_mem = MemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
         // 101 is L
         test_rom[0] = 0b10_000_000 | (0b101);
@@ -2429,7 +2390,7 @@ mod tests {
     #[test]
     fn add_step_mem() {
         let mut test_state = ProcessorState::new();
-        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut si_mem = MemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
         // 110 is memory
         test_rom[0] = 0b10_000_000 | (0b110);
@@ -2453,7 +2414,7 @@ mod tests {
     #[test]
     fn adi_step() {
         let mut test_state = ProcessorState::new();
-        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut si_mem = MemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
         test_rom[0] = 0b11_000_110;
         test_rom[1] = 0b0000_1111;
@@ -2462,7 +2423,9 @@ mod tests {
         iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.reg_a, 0b0001_0000);
         assert_eq!(test_state.flags, ConditionFlags::AC)
-=======
+    }
+
+    #[test]
     fn call_uncon() {
         let mut test_state = ProcessorState::new();
         let mut si_mem = MemMap::new();
@@ -3149,6 +3112,5 @@ mod tests {
         assert_eq!(test_state.reg_d, 0x00);
         assert_eq!(test_state.reg_e, 0x00);
         assert_ne!(test_state.prog_counter, 0);
->>>>>>> master
     }
 }
