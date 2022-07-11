@@ -1323,6 +1323,7 @@ fn opcode_add(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
 
     let cur_instruction = mem_map[state.prog_counter];
     let src = cur_instruction & 0b00_000_111;
+    state.prog_counter += 1;
     let mut addend: u8 = 0;
 
     match src {
@@ -1377,9 +1378,10 @@ fn opcode_add(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     if low_add & 0b0001_0000 != 0 {
         state.flags |= ConditionFlags::AC;
     }
+    
 }
 
-//}
+
 
 // DDD or SSS REGISTER NAME
 // 111 A
