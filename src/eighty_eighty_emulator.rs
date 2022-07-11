@@ -873,7 +873,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0xc6 => {
-            panic!(" 	ADI D8	2	Z, S, P, CY, AC	A <- A + byte");
+            opcode_adi(state, mem_map);
             // 2
         }
         0xc7 => {
@@ -1381,6 +1381,42 @@ fn opcode_add(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     
 }
 
+/// ADI data (Add Immediate)
+/// (A) ~ (A) + (byte 2)
+/// The content of the second byte of the instruction is
+/// added to the content of the accumulator. The result
+/// is placed in the accumulator.
+fn opcode_adi(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
+    // 1 | 1 | 0 | 0 | 0 | 1 | 1 | 0
+
+    let second_byte = mem_map[state.prog_counter + 1];
+    state.prog_counter += 2;
+
+    // Add first four bits to detect carry to fifth.
+    let low_add = (state.reg_a & 0b0000_1111) + (second_byte & 0b0000_1111);
+
+    // Perform addition, move sum into accumulator.
+    let (sum, overflow) = state.reg_a.overflowing_add(second_byte);
+    state.reg_a = sum;
+
+    // Clear all flags affected by ADD instruction, then set flags as needed.
+    state.flags &= !ConditionFlags::Z & !ConditionFlags::S & !ConditionFlags::P & !ConditionFlags::CY & !ConditionFlags::AC;
+    if state.reg_a == 0 {
+        state.flags |= ConditionFlags::Z;
+    }
+    if (state.reg_a & 0b1000_0000) >> 7 == 1 {
+        state.flags |= ConditionFlags::S;
+    }
+    if state.reg_a.count_ones() % 2 == 0 {
+        state.flags |= ConditionFlags::P;
+    }
+    if overflow {
+        state.flags |= ConditionFlags::CY;
+    }
+    if low_add & 0b0001_0000 != 0 {
+        state.flags |= ConditionFlags::AC;
+    }
+}
 
 
 // DDD or SSS REGISTER NAME
@@ -1779,5 +1815,19 @@ mod tests {
         iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.reg_a, 0b0001_0001);
         assert_eq!(test_state.flags, ConditionFlags::P)
+    }
+
+    #[test]
+    fn adi_step() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b11_000_110;
+        test_rom[1] = 0b0000_1111;
+        si_mem.rom = test_rom;
+        test_state.reg_a = 0b0000_0001;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0b0001_0000);
+        assert_eq!(test_state.flags, ConditionFlags::AC)
     }
 }
