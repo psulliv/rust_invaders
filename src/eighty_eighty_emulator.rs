@@ -594,27 +594,27 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0x80 => {
-            panic!(" 	ADD B	1	Z, S, P, CY, AC	A <- A + B");
+            opcode_add(state, mem_map);
             // 1
         }
         0x81 => {
-            panic!(" 	ADD C	1	Z, S, P, CY, AC	A <- A + C");
+            opcode_add(state, mem_map);
             // 1
         }
         0x82 => {
-            panic!(" 	ADD D	1	Z, S, P, CY, AC	A <- A + D");
+            opcode_add(state, mem_map);
             // 1
         }
         0x83 => {
-            panic!(" 	ADD E	1	Z, S, P, CY, AC	A <- A + E");
+            opcode_add(state, mem_map);
             // 1
         }
         0x84 => {
-            panic!(" 	ADD H	1	Z, S, P, CY, AC	A <- A + H");
+            opcode_add(state, mem_map);
             // 1
         }
         0x85 => {
-            panic!(" 	ADD L	1	Z, S, P, CY, AC	A <- A + L");
+            opcode_add(state, mem_map);
             // 1
         }
         0x86 => {
@@ -1660,11 +1660,101 @@ mod tests {
         let mut si_mem = SpaceInvadersMemMap::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
         // 111 is A
-        test_rom[0] = 0b10_000_110 | (0b111);
+        test_rom[0] = 0b10_000_000 | (0b111);
         si_mem.rom = test_rom;
         test_state.reg_a = 0b1111_1111;
         iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.reg_a, 0b1111_1110);
         assert_eq!(test_state.flags, ConditionFlags::CY | ConditionFlags::S | ConditionFlags::AC)
+    }
+
+    #[test]
+    fn add_step_reg_b() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // 000 is B
+        test_rom[0] = 0b10_000_000 | (0b000);
+        si_mem.rom = test_rom;
+        test_state.reg_a = 0b0000_0000;
+        test_state.reg_b = 0b0000_0000;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0b0000_0000);
+        assert_eq!(test_state.flags, ConditionFlags::Z | ConditionFlags::P)
+    }
+
+    #[test]
+    fn add_step_reg_c() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // 001 is C
+        test_rom[0] = 0b10_000_000 | (0b001);
+        si_mem.rom = test_rom;
+        test_state.reg_a = 0b0101_0101;
+        test_state.reg_c = 0b1010_1010;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0b1111_1111);
+        assert_eq!(test_state.flags, ConditionFlags::S | ConditionFlags::P)
+    }
+
+    #[test]
+    fn add_step_reg_d() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // 010 is D
+        test_rom[0] = 0b10_000_000 | (0b010);
+        si_mem.rom = test_rom;
+        test_state.reg_a = 0b0000_0000;
+        test_state.reg_d = 0b1111_1111;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0b1111_1111);
+        assert_eq!(test_state.flags, ConditionFlags::S | ConditionFlags::P)
+    }
+
+    #[test]
+    fn add_step_reg_e() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // 011 is E
+        test_rom[0] = 0b10_000_000 | (0b011);
+        si_mem.rom = test_rom;
+        test_state.reg_a = 0b1111_1111;
+        test_state.reg_e = 0b0000_0001;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0b0000_0000);
+        assert_eq!(test_state.flags, ConditionFlags::Z | ConditionFlags::CY | ConditionFlags::AC | ConditionFlags::P)
+    }
+
+    #[test]
+    fn add_step_reg_h() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // 100 is H
+        test_rom[0] = 0b10_000_000 | (0b100);
+        si_mem.rom = test_rom;
+        test_state.reg_a = 0b1001_1001;
+        test_state.reg_h = 0b1001_1001;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0b0011_0010);
+        assert_eq!(test_state.flags, ConditionFlags::CY | ConditionFlags::AC)
+    }
+
+    #[test]
+    fn add_step_reg_l() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // 101 is L
+        test_rom[0] = 0b10_000_000 | (0b101);
+        si_mem.rom = test_rom;
+        test_state.reg_a = 0b0000_0001;
+        test_state.reg_l = 0b1111_1110;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0b1111_1111);
+        assert_eq!(test_state.flags, ConditionFlags::S | ConditionFlags::P)
     }
 }
