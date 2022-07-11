@@ -618,7 +618,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut SpaceIn
             // 1
         }
         0x86 => {
-            panic!(" 	ADD M	1	Z, S, P, CY, AC	A <- A + (HL)");
+            opcode_add(state, mem_map);
             // 1
         }
         0x87 => {
@@ -1321,68 +1321,65 @@ fn opcode_add(state: &mut ProcessorState, mem_map: &mut SpaceInvadersMemMap) {
     // or
     // 1 | 0 | 0 | 0 | 0 | 1 | 1 | 0
 
-    // Test to see if this is an addition from memory or
-    // a register.
-
     let cur_instruction = mem_map[state.prog_counter];
     let src = cur_instruction & 0b00_000_111;
     let mut addend: u8 = 0;
 
-    if src == 0b110 {
-        // Then this is a 1 | 0 | 0 | 0 | 0 | 1 | 1 | 0
-        // format opcode adding value located at the
-        // memory address in pair H-L to accumulator.
-        let addr: usize = (((state.reg_h as u16) << 8) + state.reg_l as u16).into();
-        addend = mem_map[addr];
-    }
-    else {
+    match src {
+        0b110 => {
+            // Then this is a 1 | 0 | 0 | 0 | 0 | 1 | 1 | 0
+            // format opcode adding value located at the
+            // memory address in pair H-L to accumulator.
+            let addr: usize = (((state.reg_h as u16) << 8) + state.reg_l as u16).into();
+            addend = mem_map[addr];
+        }
         // Then this is a 1 | 0 | 0 | 0 | 0 | S | S | S
         // format opcode, adding register value to accumulator.
-        match src {
-            // A
-            0b111 => {addend = state.reg_a;}
-            // B
-            0b000 => {addend = state.reg_b;}
-            // C
-            0b001 => {addend = state.reg_c;}
-            // D
-            0b010 => {addend = state.reg_d;}
-            // E
-            0b011 => {addend = state.reg_e;}
-            // H
-            0b100 => {addend = state.reg_h;}
-            // L
-            0b101 => {addend = state.reg_l;}
-            _ => {}
-        }
-
-        // Add first four bits to detect carry to fifth.
-        let low_add = (state.reg_a & 0b0000_1111) + (addend & 0b0000_1111);
-
-        // Perform addition, move sum into accumulator.
-        let (sum, overflow) = state.reg_a.overflowing_add(addend);
-        state.reg_a = sum;
-
-        // Clear all flags affected by ADD instruction, then set flags as needed.
-        state.flags &= !ConditionFlags::Z & !ConditionFlags::S & !ConditionFlags::P & !ConditionFlags::CY & !ConditionFlags::AC;
-        if state.reg_a == 0 {
-            state.flags |= ConditionFlags::Z;
-        }
-        if (state.reg_a & 0b1000_0000) >> 7 == 1 {
-            state.flags |= ConditionFlags::S;
-        }
-        if state.reg_a.count_ones() % 2 == 0 {
-            state.flags |= ConditionFlags::P;
-        }
-        if overflow {
-            state.flags |= ConditionFlags::CY;
-        }
-        if low_add & 0b0001_0000 != 0 {
-            state.flags |= ConditionFlags::AC;
-        }
+        // A
+        0b111 => {addend = state.reg_a;}
+        // B
+        0b000 => {addend = state.reg_b;}
+        // C
+        0b001 => {addend = state.reg_c;}
+        // D
+        0b010 => {addend = state.reg_d;}
+        // E
+        0b011 => {addend = state.reg_e;}
+        // H
+        0b100 => {addend = state.reg_h;}
+        // L
+        0b101 => {addend = state.reg_l;}
+        // Invalid Source
+        _ => {panic!("invalid register bits in opcode_add");}
     }
 
+    // Add first four bits to detect carry to fifth.
+    let low_add = (state.reg_a & 0b0000_1111) + (addend & 0b0000_1111);
+
+    // Perform addition, move sum into accumulator.
+    let (sum, overflow) = state.reg_a.overflowing_add(addend);
+    state.reg_a = sum;
+
+    // Clear all flags affected by ADD instruction, then set flags as needed.
+    state.flags &= !ConditionFlags::Z & !ConditionFlags::S & !ConditionFlags::P & !ConditionFlags::CY & !ConditionFlags::AC;
+    if state.reg_a == 0 {
+        state.flags |= ConditionFlags::Z;
+    }
+    if (state.reg_a & 0b1000_0000) >> 7 == 1 {
+        state.flags |= ConditionFlags::S;
+    }
+    if state.reg_a.count_ones() % 2 == 0 {
+        state.flags |= ConditionFlags::P;
+    }
+    if overflow {
+        state.flags |= ConditionFlags::CY;
+    }
+    if low_add & 0b0001_0000 != 0 {
+        state.flags |= ConditionFlags::AC;
+    }
 }
+
+//}
 
 // DDD or SSS REGISTER NAME
 // 111 A
@@ -1756,5 +1753,29 @@ mod tests {
         iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.reg_a, 0b1111_1111);
         assert_eq!(test_state.flags, ConditionFlags::S | ConditionFlags::P)
+    }
+
+    #[test]
+    fn add_step_mem() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = SpaceInvadersMemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        // 110 is memory
+        test_rom[0] = 0b10_000_000 | (0b110);
+        si_mem.rom = test_rom;
+        test_state.reg_a = 0b0000_0001;
+
+        test_state.reg_h = ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) >> 8) as u8;
+        test_state.reg_l = ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) & 0x00ff) as u8;
+        test_state.reg_l += 0b1000;
+        //panic!("Address in h is {:?}, l is {:?}", &test_state.reg_h, &test_state.reg_l);
+
+        let address = ((test_state.reg_h as u16) << 8) + test_state.reg_l as u16;
+        //panic!("Address is {:?}", &address);
+        si_mem[address.into()] = 0b0001_0000;
+        //panic!("value at address is {:?}", si_mem[address.into()]);
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0b0001_0001);
+        assert_eq!(test_state.flags, ConditionFlags::P)
     }
 }
