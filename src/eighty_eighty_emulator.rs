@@ -809,67 +809,67 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut MemMap)
             // 1
         }
         0x88 => {
-            panic!("    ADC B   1       Z, S, P, CY, AC A <- A + B + CY");
+            opcode_adc(state, mem_map);
             // 1
         }
         0x89 => {
-            panic!("    ADC C   1       Z, S, P, CY, AC A <- A + C + CY");
+            opcode_adc(state, mem_map);
             // 1
         }
         0x8a => {
-            panic!("    ADC D   1       Z, S, P, CY, AC A <- A + D + CY");
+            opcode_adc(state, mem_map);
             // 1
         }
         0x8b => {
-            panic!("    ADC E   1       Z, S, P, CY, AC A <- A + E + CY");
+            opcode_adc(state, mem_map);
             // 1
         }
         0x8c => {
-            panic!("    ADC H   1       Z, S, P, CY, AC A <- A + H + CY");
+            opcode_adc(state, mem_map);
             // 1
         }
         0x8d => {
-            panic!("    ADC L   1       Z, S, P, CY, AC A <- A + L + CY");
+            opcode_adc(state, mem_map);
             // 1
         }
         0x8e => {
-            panic!("    ADC M   1       Z, S, P, CY, AC A <- A + (HL) + CY");
+            opcode_adc(state, mem_map);
             // 1
         }
         0x8f => {
-            panic!("    ADC A   1       Z, S, P, CY, AC A <- A + A + CY");
+            opcode_adc(state, mem_map);
             // 1
         }
         0x90 => {
-            panic!("    SUB B   1       Z, S, P, CY, AC A <- A - B");
+            opcode_sub(state, mem_map);
             // 1
         }
         0x91 => {
-            panic!("    SUB C   1       Z, S, P, CY, AC A <- A - C");
+            opcode_sub(state, mem_map);
             // 1
         }
         0x92 => {
-            panic!("    SUB D   1       Z, S, P, CY, AC A <- A + D");
+            opcode_sub(state, mem_map);
             // 1
         }
         0x93 => {
-            panic!("    SUB E   1       Z, S, P, CY, AC A <- A - E");
+            opcode_sub(state, mem_map);
             // 1
         }
         0x94 => {
-            panic!("    SUB H   1       Z, S, P, CY, AC A <- A + H");
+            opcode_sub(state, mem_map);
             // 1
         }
         0x95 => {
-            panic!("    SUB L   1       Z, S, P, CY, AC A <- A - L");
+            opcode_sub(state, mem_map);
             // 1
         }
         0x96 => {
-            panic!("    SUB M   1       Z, S, P, CY, AC A <- A + (HL)");
+            opcode_sub(state, mem_map);
             // 1
         }
         0x97 => {
-            panic!("    SUB A   1       Z, S, P, CY, AC A <- A - A");
+            opcode_sub(state, mem_map);
             // 1
         }
         0x98 => {
@@ -1740,7 +1740,6 @@ fn opcode_add(state: &mut ProcessorState, mem_map: &mut MemMap) {
     if low_add & 0b0001_0000 != 0 {
         state.flags |= ConditionFlags::AC;
     }
-    
 }
 
 /// ADI data (Add Immediate)
@@ -1773,6 +1772,171 @@ fn opcode_adi(state: &mut ProcessorState, mem_map: &mut MemMap) {
         state.flags |= ConditionFlags::P;
     }
     if overflow {
+        state.flags |= ConditionFlags::CY;
+    }
+    if low_add & 0b0001_0000 != 0 {
+        state.flags |= ConditionFlags::AC;
+    }
+}
+
+/// ADC r (Add Register with carry)
+/// (A) ~ (A) + (r) + (CY)
+/// The content of register r and the content of the carry
+/// bit are added to the content of the accumulator. The
+/// result is placed in the accumulator.
+/// ADC M (Add memory with carry)
+/// (A) ~ (A) + ((H) (L)) + (CY)
+/// The content of the memory location whose address is
+/// contained in the Hand L registers and the content of
+/// the CY flag are added to the accumulator. The result
+/// is placed in the accumulator.
+fn opcode_adc(state: &mut ProcessorState, mem_map: &mut MemMap) {
+    let cur_instruction = mem_map[state.prog_counter];
+    let src = get_source_register_bit_pattern(cur_instruction);
+    state.prog_counter += 1;
+    let addend: u8;
+
+    match src {
+        RegisterBitPattern::Other => {
+            // Then this is a 1 | 0 | 0 | 0 | 0 | 1 | 1 | 0
+            // format opcode adding value located at the
+            // memory address in pair H-L to accumulator.
+            let addr = state.get_rp(RPairBitPattern::HL);
+            addend = mem_map[addr];
+        }
+        // Then this is a 1 | 0 | 0 | 0 | 0 | S | S | S
+        // format opcode, adding register value to accumulator.
+        RegisterBitPattern::A => {
+            addend = state.reg_a;
+        }
+        RegisterBitPattern::B => {
+            addend = state.reg_b;
+        }
+        RegisterBitPattern::C => {
+            addend = state.reg_c;
+        }
+        RegisterBitPattern::D => {
+            addend = state.reg_d;
+        }
+        RegisterBitPattern::E => {
+            addend = state.reg_e;
+        }
+        RegisterBitPattern::H => {
+            addend = state.reg_h;
+        }
+        RegisterBitPattern::L => {
+            addend = state.reg_l;
+        }
+    }
+
+    let cf_state: u8 = state.check_condition(ConditionBitPattern::C).into();
+
+    // Add first four bits (+1 for carry flag, if set) to detect carry to fifth.
+    let low_add = (state.reg_a & 0b0000_1111) + (addend & 0b0000_1111) + cf_state;
+
+    // Perform addition, move sum into accumulator.
+    let (sum, overflow_first_add) = state.reg_a.overflowing_add(addend);
+    let (sum, overflow_second_add) = sum.overflowing_add(cf_state);
+    state.reg_a = sum;
+
+    // Clear all flags affected by ADC instruction, then set flags as needed.
+    state.flags &= !ConditionFlags::Z & !ConditionFlags::S & !ConditionFlags::P & !ConditionFlags::CY & !ConditionFlags::AC;
+    if state.reg_a == 0 {
+        state.flags |= ConditionFlags::Z;
+    }
+    if (state.reg_a & 0b1000_0000) >> 7 == 1 {
+        state.flags |= ConditionFlags::S;
+    }
+    if state.reg_a.count_ones() % 2 == 0 {
+        state.flags |= ConditionFlags::P;
+    }
+    if overflow_first_add | overflow_second_add {
+        state.flags |= ConditionFlags::CY;
+    }
+    if low_add & 0b0001_0000 != 0 {
+        state.flags |= ConditionFlags::AC;
+    }
+}
+
+/// SUB r (Subtract register)
+/// (A) ~ (A) - (r)
+/// The content of register r is subtracted from the
+/// content of the accumulator. The result is placed in
+/// the accumulator.
+/// SUB M (Subtract memory)
+/// (A) ~ (A) - ((H) (L))
+/// The content of the memory location whose address is
+/// contained in the Hand L registers is subtracted from
+/// the content of the accumulator. The result is placed
+/// in the accumulator
+fn opcode_sub(state: &mut ProcessorState, mem_map: &mut MemMap) {
+    // 1 | 0 | 0 | 1 | 0 | S | S | S
+    // or
+    // 1 | 0 | 0 | 1 | 0 | 1 | 1 | 0
+
+    let cur_instruction = mem_map[state.prog_counter];
+    let src = get_source_register_bit_pattern(cur_instruction);
+    state.prog_counter += 1;
+    let subtrahend: u8;
+
+    match src {
+        RegisterBitPattern::Other => {
+            // Then this is a 1 | 0 | 0 | 0 | 0 | 1 | 1 | 0
+            // format opcode adding value located at the
+            // memory address in pair H-L to accumulator.
+            let addr = state.get_rp(RPairBitPattern::HL);
+            subtrahend = mem_map[addr];
+        }
+        // Then this is a 1 | 0 | 0 | 0 | 0 | S | S | S
+        // format opcode, subtracting register value from accumulator.
+        RegisterBitPattern::A => {
+            subtrahend = state.reg_a;
+        }
+        RegisterBitPattern::B => {
+            subtrahend = state.reg_b;
+        }
+        RegisterBitPattern::C => {
+            subtrahend = state.reg_c;
+        }
+        RegisterBitPattern::D => {
+            subtrahend = state.reg_d;
+        }
+        RegisterBitPattern::E => {
+            subtrahend = state.reg_e;
+        }
+        RegisterBitPattern::H => {
+            subtrahend = state.reg_h;
+        }
+        RegisterBitPattern::L => {
+            subtrahend = state.reg_l;
+        }
+    }
+
+    let twos_complement = subtrahend.wrapping_neg();
+
+    // Add first four bits to detect carry to fifth.
+    let low_add = (state.reg_a & 0b0000_1111) + (twos_complement & 0b0000_1111);
+
+    // Perform addition, move sum into accumulator.
+    let (sum, overflow) = state.reg_a.overflowing_add(twos_complement);
+    state.reg_a = sum;
+
+    // Clear all flags affected by SUB instruction, then set flags as needed.
+    state.flags &= !ConditionFlags::Z & !ConditionFlags::S & !ConditionFlags::P & !ConditionFlags::CY & !ConditionFlags::AC;
+    if state.reg_a == 0 {
+        state.flags |= ConditionFlags::Z;
+    }
+    if (state.reg_a & 0b1000_0000) >> 7 == 1 {
+        state.flags |= ConditionFlags::S;
+    }
+    if state.reg_a.count_ones() % 2 == 0 {
+        state.flags |= ConditionFlags::P;
+    }
+    // If there is no carry out of the high-order bit position, indicating that
+    // a borrow occurred, the Carry bit is set; otherwise it is reset.
+    // Note that this differs from an add operation, which resets the carry if
+    // no overflow occurs.
+    if !overflow {
         state.flags |= ConditionFlags::CY;
     }
     if low_add & 0b0001_0000 != 0 {
@@ -2396,16 +2560,11 @@ mod tests {
         test_rom[0] = 0b10_000_000 | (0b110);
         si_mem.rom = test_rom;
         test_state.reg_a = 0b0000_0001;
-
         test_state.reg_h = ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) >> 8) as u8;
         test_state.reg_l = ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) & 0x00ff) as u8;
         test_state.reg_l += 0b1000;
-        //panic!("Address in h is {:?}, l is {:?}", &test_state.reg_h, &test_state.reg_l);
-
         let address = ((test_state.reg_h as u16) << 8) + test_state.reg_l as u16;
-        //panic!("Address is {:?}", &address);
         si_mem[address.into()] = 0b0001_0000;
-        //panic!("value at address is {:?}", si_mem[address.into()]);
         iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.reg_a, 0b0001_0001);
         assert_eq!(test_state.flags, ConditionFlags::P)
@@ -2424,6 +2583,141 @@ mod tests {
         assert_eq!(test_state.reg_a, 0b0001_0000);
         assert_eq!(test_state.flags, ConditionFlags::AC)
     }
+
+    #[test]
+    fn adc_step_reg_a() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = MemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b10_001_000 | (RegisterBitPattern::A as u8);
+        si_mem.rom = test_rom;
+        test_state.flags.bits = 0b0000_0001;
+        test_state.reg_a = 0b0000_0001;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0b0000_0011);
+        assert_eq!(test_state.flags, ConditionFlags::P)
+    }
+
+    #[test]
+    fn adc_step_reg_b() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = MemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b10_001_000 | (RegisterBitPattern::B as u8);
+        si_mem.rom = test_rom;
+        test_state.flags.bits = 0b0000_0001;
+        test_state.reg_a = 0b0000_0001;
+        test_state.reg_b = 0b0000_1111;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0b0001_0001);
+        assert_eq!(test_state.flags, ConditionFlags::P | ConditionFlags::AC)
+    }
+
+    #[test]
+    fn adc_step_reg_c() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = MemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b10_001_000 | (RegisterBitPattern::C as u8);
+        si_mem.rom = test_rom;
+        test_state.flags.bits = 0b0000_0000;
+        test_state.reg_a = 0b0000_0001;
+        test_state.reg_c = 0b1111_1111;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0b0000_0000);
+        assert_eq!(test_state.flags, ConditionFlags::P | ConditionFlags::AC | ConditionFlags::CY | ConditionFlags::Z)
+    }
+
+    #[test]
+    fn adc_step_reg_d() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = MemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b10_001_000 | (RegisterBitPattern::D as u8);
+        si_mem.rom = test_rom;
+        test_state.flags.bits = 0b0000_0000;
+        test_state.reg_a = 0b0000_0001;
+        test_state.reg_d = 0b1111_1111;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0b0000_0000);
+        assert_eq!(test_state.flags, ConditionFlags::P | ConditionFlags::AC | ConditionFlags::CY | ConditionFlags::Z)
+    }
+
+    #[test]
+    fn adc_step_reg_e() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = MemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b10_001_000 | (RegisterBitPattern::E as u8);
+        si_mem.rom = test_rom;
+        test_state.flags.bits = 0b0000_0000;
+        test_state.reg_a = 0b0000_0001;
+        test_state.reg_e = 0b1111_1111;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0b0000_0000);
+        assert_eq!(test_state.flags, ConditionFlags::P | ConditionFlags::AC | ConditionFlags::CY | ConditionFlags::Z)
+    }
+
+    #[test]
+    fn adc_step_reg_h() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = MemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b10_001_000 | (RegisterBitPattern::H as u8);
+        si_mem.rom = test_rom;
+        test_state.flags.bits = 0b0000_0000;
+        test_state.reg_a = 0b0000_0001;
+        test_state.reg_h = 0b1111_1111;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0b0000_0000);
+        assert_eq!(test_state.flags, ConditionFlags::P | ConditionFlags::AC | ConditionFlags::CY | ConditionFlags::Z)
+    }
+
+    #[test]
+    fn adc_step_reg_l() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = MemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b10_001_000 | (RegisterBitPattern::L as u8);
+        si_mem.rom = test_rom;
+        test_state.flags.bits = 0b0000_0000;
+        test_state.reg_a = 0b0000_0001;
+        test_state.reg_l = 0b1111_1111;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0b0000_0000);
+        assert_eq!(test_state.flags, ConditionFlags::P | ConditionFlags::AC | ConditionFlags::CY | ConditionFlags::Z)
+    }
+
+    #[test]
+    fn adc_step_mem() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = MemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b10_001_000 | (RegisterBitPattern::Other as u8);
+        si_mem.rom = test_rom;
+        test_state.flags.bits = 0b0000_0001;
+        test_state.reg_a = 0b0000_0101;
+        test_state.reg_h = ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) >> 8) as u8;
+        test_state.reg_l = ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) & 0x00ff) as u8;
+        let address = ((test_state.reg_h as u16) << 8) + test_state.reg_l as u16;
+        si_mem[address.into()] = 0b0001_0000;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0b0001_0110);
+        assert_eq!(test_state.flags.bits, 0b0000_0000)
+    }
+
+    #[test]
+    fn sub_step_reg_a() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = MemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b10_010_000 | (RegisterBitPattern::A as u8);
+        si_mem.rom = test_rom;
+        test_state.reg_a = 0b1111_1111;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0b0000_0000);
+        assert_eq!(test_state.flags, ConditionFlags::Z | ConditionFlags::P | ConditionFlags::AC)
+    }   
 
     #[test]
     fn call_uncon() {
