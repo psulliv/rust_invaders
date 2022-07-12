@@ -1080,7 +1080,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut MemMap)
             opcode_call(state, mem_map);
         }
         0xce => {
-            panic!("    ACI D8  2       Z, S, P, CY, AC A <- A + data + CY");
+            opcode_aci(state, mem_map);
             // 2
         }
         0xcf => {
@@ -1840,6 +1840,46 @@ fn opcode_adc(state: &mut ProcessorState, mem_map: &mut MemMap) {
     state.reg_a = sum;
 
     // Clear all flags affected by ADC instruction, then set flags as needed.
+    state.flags &= !ConditionFlags::Z & !ConditionFlags::S & !ConditionFlags::P & !ConditionFlags::CY & !ConditionFlags::AC;
+    if state.reg_a == 0 {
+        state.flags |= ConditionFlags::Z;
+    }
+    if (state.reg_a & 0b1000_0000) >> 7 == 1 {
+        state.flags |= ConditionFlags::S;
+    }
+    if state.reg_a.count_ones() % 2 == 0 {
+        state.flags |= ConditionFlags::P;
+    }
+    if overflow_first_add | overflow_second_add {
+        state.flags |= ConditionFlags::CY;
+    }
+    if low_add & 0b0001_0000 != 0 {
+        state.flags |= ConditionFlags::AC;
+    }
+}
+
+/// ACI data (Add immediate with carry)
+/// (A) ~ (A) + (byte 2) + (CY)
+/// The content of the second byte of the instruction and
+/// the content of the CY flag are added to the contents
+/// of the accumulator. The result is placed in the
+/// accumulator.
+fn opcode_aci(state: &mut ProcessorState, mem_map: &mut MemMap) {
+    // 1 | 1 | 0 | 0 | 1 | 1 | 1 | 0
+    let second_byte = mem_map[state.prog_counter + 1];
+    state.prog_counter += 2;
+
+    let cf_state: u8 = state.check_condition(ConditionBitPattern::C).into();
+
+    // Add first four bits (+1 for carry flag, if set) to detect carry to fifth.
+    let low_add = (state.reg_a & 0b0000_1111) + (second_byte & 0b0000_1111) + cf_state;
+
+    // Perform addition, move sum into accumulator.
+    let (sum, overflow_first_add) = state.reg_a.overflowing_add(second_byte);
+    let (sum, overflow_second_add) = sum.overflowing_add(cf_state);
+    state.reg_a = sum;
+
+    // Clear all flags affected by ACI instruction, then set flags as needed.
     state.flags &= !ConditionFlags::Z & !ConditionFlags::S & !ConditionFlags::P & !ConditionFlags::CY & !ConditionFlags::AC;
     if state.reg_a == 0 {
         state.flags |= ConditionFlags::Z;
