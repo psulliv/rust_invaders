@@ -1984,6 +1984,44 @@ fn opcode_sub(state: &mut ProcessorState, mem_map: &mut MemMap) {
     }
 }
 
+/// SUI data (Subtract immediate)
+/// (A) ~ (A) - (byte 2)
+/// The content of the second byte of the instruction is
+/// subtracted from the content of the accumulator. The
+/// result is placed in the accumulator.
+fn opcode_sui() {
+    // 1 | 1 | 0 | 1 | 0 | 1 | 1 | 0
+
+}
+
+/// SBB r (Subtract Register with borrow)
+/// (A) ~ (A) - (r) - (CY)
+/// The content of register r and the content of the CY
+/// flag are both subtracted from the accumulator. The
+/// result is placed in the accumulator.
+/// SBB M (Subtract memory with borrow)
+/// (A) ~ (A) - ((H) (L)) - (CY)
+/// The content of the memory location whose address is
+/// contained in the Hand L registers and the content of
+/// the CY flag are both subtracted from the accumulator.
+/// The result is placed in the accumulator.
+fn opcode_sbb() {
+    // 1 | 0 | 0 | 1 | 1 | S | S | S
+    // or
+    // 1 | 0 | 0 | 1 | 1 | 1 | 1 | 0  
+    
+}
+
+/// SBI data (Subtract immediate with borrow)
+/// (A) ~ (A) - (byte 2) - (CY)
+/// The contents of the second byte of the instruction
+/// and the contents of the CY flag are both subtracted
+/// from the accumulator. The result is placed in the
+/// accumulator.
+fn opcode_sbi() {
+    // 1 | 1 | 0 | 1 | 1 | 1 | 1 | 0
+    
+}
 
 // DDD or SSS REGISTER NAME
 // 111 A
