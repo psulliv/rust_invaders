@@ -51,6 +51,26 @@ impl ProcessorState {
         }
     }
 
+    // Gets value from a register, given its bit pattern.
+    pub fn get_reg_value(&self, pattern: RegisterBitPattern) -> Option<u8> {
+        match pattern {
+            RegisterBitPattern::A => {Some(self.reg_a)}
+            RegisterBitPattern::B => {Some(self.reg_b)}
+            RegisterBitPattern::C => {Some(self.reg_c)}
+            RegisterBitPattern::D => {Some(self.reg_d)}
+            RegisterBitPattern::E => {Some(self.reg_e)}
+            RegisterBitPattern::H => {Some(self.reg_h)}
+            RegisterBitPattern::L => {Some(self.reg_l)}
+            RegisterBitPattern::Other => {None}
+        }
+    }
+
+    // Gets value at the address indicated by the register pair bit pattern
+    pub fn get_mem_value(&mut self, reg_pair: RPairBitPattern, mem_map: &MemMap) -> u8 {
+            let addr = self.get_rp(reg_pair);
+            mem_map[addr]
+    }
+
     /// This uses the register pair bits from the opcode to
     /// load an address into a register pair
     /// 00 B-C
@@ -877,7 +897,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut MemMap)
             // 1
         }
         0x99 => {
-            panic!("    SBB C   1       Z, S, P, CY, AC A <- A - C - CY");
+            opcode_sbb(state, mem_map);
             // 1
         }
         0x9a => {
@@ -1107,7 +1127,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut MemMap)
             opcode_push(state, mem_map);
         }
         0xd6 => {
-            panic!("    SUI D8  2       Z, S, P, CY, AC A <- A - data");
+            opcode_sui(state, mem_map);
             // 2
         }
         0xd7 => {
@@ -1136,7 +1156,7 @@ pub fn iterate_processor_state(state: &mut ProcessorState, mem_map: &mut MemMap)
             // 1
         }
         0xde => {
-            panic!("    SBI D8  2       Z, S, P, CY, AC A <- A - data - CY");
+            opcode_sbi(state, mem_map);
             // 2
         }
         0xdf => {
@@ -1663,6 +1683,40 @@ fn opcode_mvi(state: &mut ProcessorState, mem_map: &mut MemMap) {
     }
 }
 
+#[derive(PartialEq)]
+enum ArithmeticOpType {
+    Addition,
+    Subtraction,
+}
+
+// Clear all flags affected by arithmetic operations, then set flags as needed.
+fn update_arithmetic_flags(state: &mut ProcessorState, op_type: ArithmeticOpType, carry: bool, aux_carry: bool) {
+    let is_addition = op_type == ArithmeticOpType::Addition;
+    state.flags &= !ConditionFlags::Z & !ConditionFlags::S & !ConditionFlags::P & !ConditionFlags::CY & !ConditionFlags::AC;
+    if state.reg_a == 0 {
+        state.flags |= ConditionFlags::Z;
+    }
+    if (state.reg_a & 0b1000_0000) >> 7 == 1 {
+        state.flags |= ConditionFlags::S;
+    }
+    if state.reg_a.count_ones() % 2 == 0 {
+        state.flags |= ConditionFlags::P;
+    }
+    if carry && is_addition {
+        state.flags |= ConditionFlags::CY;
+    }
+    if !carry && !is_addition {
+    // If there is no carry out of the high-order bit position, indicating that
+    // a borrow occurred, the Carry bit is set; otherwise it is reset.
+    // Note that this differs from an add operation, which resets the carry if
+    // no overflow occurs.
+        state.flags |= ConditionFlags::CY;
+    }
+    if aux_carry {
+        state.flags |= ConditionFlags::AC;
+    }
+}
+
 /// ADD r (Add Register)
 /// (A) ~ (A) + (r)
 /// The content of register r is added to the content of
@@ -1989,9 +2043,19 @@ fn opcode_sub(state: &mut ProcessorState, mem_map: &mut MemMap) {
 /// The content of the second byte of the instruction is
 /// subtracted from the content of the accumulator. The
 /// result is placed in the accumulator.
-fn opcode_sui() {
+fn opcode_sui(state: &mut ProcessorState, mem_map: &mut MemMap) {
     // 1 | 1 | 0 | 1 | 0 | 1 | 1 | 0
-
+    let second_byte = mem_map[state.prog_counter + 1];
+    state.prog_counter += 2;
+    println!("second_byte is {:?}", &second_byte);
+    let twos_complement = second_byte.wrapping_neg();
+    println!("twos comp is {:?}", &twos_complement);
+    let low_add = (state.reg_a & 0b0000_1111) + (twos_complement & 0b0000_1111);
+    let (sum, overflow) = state.reg_a.overflowing_add(twos_complement);
+    let aux_carry = low_add & 0b0001_0000 != 0;
+    state.reg_a = sum;
+    println!("sum is {:?}", &sum);
+    update_arithmetic_flags(state, ArithmeticOpType::Subtraction, overflow, aux_carry);
 }
 
 /// SBB r (Subtract Register with borrow)
@@ -2005,11 +2069,34 @@ fn opcode_sui() {
 /// contained in the Hand L registers and the content of
 /// the CY flag are both subtracted from the accumulator.
 /// The result is placed in the accumulator.
-fn opcode_sbb() {
+fn opcode_sbb(state: &mut ProcessorState, mem_map: &mut MemMap) {
     // 1 | 0 | 0 | 1 | 1 | S | S | S
     // or
     // 1 | 0 | 0 | 1 | 1 | 1 | 1 | 0  
+    let cur_instruction = mem_map[state.prog_counter];
+    let src = get_source_register_bit_pattern(cur_instruction);
+    state.prog_counter += 1;
+    let subtrahend: u8;
     
+    match state.get_reg_value(src) {
+        Some(value) => {
+            subtrahend = value;
+        }
+        None => {
+            // Then this is a 1 | 0 | 0 | 0 | 0 | 1 | 1 | 0
+            // format opcode subtracting value located at the
+            // memory address in pair H-L from accumulator.
+            subtrahend = state.get_mem_value(RPairBitPattern::HL, mem_map)
+        }
+    }
+    // Perform subtraction using two's complement and set flags as needed.
+    let cf_state = state.check_condition(ConditionBitPattern::C);
+    let twos_complement = (subtrahend + cf_state as u8).wrapping_neg();
+    let low_add = (state.reg_a & 0b0000_1111) + (twos_complement & 0b0000_1111);
+    let (sum, overflow) = state.reg_a.overflowing_add(twos_complement);
+    let aux_carry = low_add & 0b0001_0000 != 0;
+    state.reg_a = sum;
+    update_arithmetic_flags(state, ArithmeticOpType::Subtraction, overflow, aux_carry);
 }
 
 /// SBI data (Subtract immediate with borrow)
@@ -2018,9 +2105,20 @@ fn opcode_sbb() {
 /// and the contents of the CY flag are both subtracted
 /// from the accumulator. The result is placed in the
 /// accumulator.
-fn opcode_sbi() {
-    // 1 | 1 | 0 | 1 | 1 | 1 | 1 | 0
-    
+fn opcode_sbi(state: &mut ProcessorState, mem_map: &mut MemMap) {
+    //1 | 1 | 0 | 1 | 1 | 1 | 1 | 0
+    let second_byte = mem_map[state.prog_counter + 1];
+    state.prog_counter += 2;
+
+    // Perform subtraction using two's complement, then set flags as needed.
+    let cf_state = state.check_condition(ConditionBitPattern::C);
+    let twos_complement = (second_byte + cf_state as u8).wrapping_neg();
+    let low_add = (state.reg_a & 0b0000_1111) + (twos_complement & 0b0000_1111);
+    let (sum, overflow) = state.reg_a.overflowing_add(twos_complement);
+
+    let aux_carry = low_add & 0b0001_0000 != 0;
+    state.reg_a = sum;
+    update_arithmetic_flags(state, ArithmeticOpType::Subtraction, overflow, aux_carry);
 }
 
 // DDD or SSS REGISTER NAME
@@ -2795,7 +2893,51 @@ mod tests {
         iterate_processor_state(&mut test_state, &mut si_mem);
         assert_eq!(test_state.reg_a, 0b0000_0000);
         assert_eq!(test_state.flags, ConditionFlags::Z | ConditionFlags::P | ConditionFlags::AC)
-    }   
+    }
+
+    #[test]
+    fn sbb_step_reg_c() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = MemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b10_011_000 | (RegisterBitPattern::C as u8);
+        si_mem.rom = test_rom;
+        test_state.reg_a = 0b0000_0100;
+        test_state.reg_c = 0b0000_0010;
+        test_state.flags = ConditionFlags::CY;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0b0000_0001);
+        assert_eq!(test_state.flags, ConditionFlags::AC)
+    }
+
+    #[test]
+    fn sui() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = MemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b11_010_110;
+        test_rom[1] = 0b0000_0100;
+        si_mem.rom = test_rom;
+        test_state.reg_a = 0b0000_1111;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0b0000_1011);
+        assert_eq!(test_state.flags, ConditionFlags::AC)
+    }
+
+    #[test]
+    fn sbi() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = MemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b11_011_110;
+        test_rom[1] = 0b0000_0010;
+        si_mem.rom = test_rom;
+        test_state.reg_a = 0b0000_0100;
+        test_state.flags = ConditionFlags::CY;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0b0000_0001);
+        assert_eq!(test_state.flags, ConditionFlags::AC)
+    }
 
     #[test]
     fn call_uncon() {
