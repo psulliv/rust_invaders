@@ -2761,6 +2761,107 @@ mod tests {
     }
 
     #[test]
+    fn sub_step_reg_b() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = MemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b10_010_000 | (RegisterBitPattern::B as u8);
+        si_mem.rom = test_rom;
+        test_state.reg_a = 0b0000_0000;
+        test_state.reg_b = 0b0000_0000;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0b0000_0000);
+        assert_eq!(test_state.flags, ConditionFlags::Z | ConditionFlags::P | ConditionFlags::CY)
+    }
+
+    #[test]
+    fn sub_step_reg_c() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = MemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b10_010_000 | (RegisterBitPattern::C as u8);
+        si_mem.rom = test_rom;
+        test_state.reg_a = 0b0101_0101;
+        test_state.reg_c = 0b1010_1010;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0b1010_1011);
+        assert_eq!(test_state.flags, ConditionFlags::S | ConditionFlags::CY)
+    }
+
+    #[test]
+    fn sub_step_reg_d() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = MemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b10_010_000 | (RegisterBitPattern::D as u8);
+        si_mem.rom = test_rom;
+        test_state.reg_a = 0b0000_0000;
+        test_state.reg_d = 0b1111_1111;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0b0000_0001);
+        assert_eq!(test_state.flags, ConditionFlags::CY)
+    }
+
+    #[test]
+    fn sub_step_reg_e() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = MemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b10_010_000 | (RegisterBitPattern::E as u8);
+        si_mem.rom = test_rom;
+        test_state.reg_a = 0b1111_1111;
+        test_state.reg_e = 0b0000_0001;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0b1111_1110);
+        assert_eq!(test_state.flags, ConditionFlags::S | ConditionFlags::AC)
+    }
+
+    #[test]
+    fn sub_step_reg_h() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = MemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b10_010_000 | (RegisterBitPattern::H as u8);
+        si_mem.rom = test_rom;
+        test_state.reg_a = 0b1001_1001;
+        test_state.reg_h = 0b1001_1001;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0b0000_0000);
+        assert_eq!(test_state.flags, ConditionFlags::Z | ConditionFlags::P | ConditionFlags::AC)
+    }
+
+    #[test]
+    fn sub_step_reg_l() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = MemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b10_010_000 | (RegisterBitPattern::L as u8);
+        si_mem.rom = test_rom;
+        test_state.reg_a = 0b0000_0001;
+        test_state.reg_l = 0b1111_1110;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0b0000_0011);
+        assert_eq!(test_state.flags, ConditionFlags::P | ConditionFlags::CY)
+    }
+
+    #[test]
+    fn sub_step_mem() {
+        let mut test_state = ProcessorState::new();
+        let mut si_mem = MemMap::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b10_010_000 | (RegisterBitPattern::Other as u8);
+        si_mem.rom = test_rom;
+        test_state.reg_a = 0b0001_0001;
+        test_state.reg_h = ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) >> 8) as u8;
+        test_state.reg_l = ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) & 0x00ff) as u8;
+        let address = ((test_state.reg_h as u16) << 8) + test_state.reg_l as u16;
+        si_mem[address.into()] = 0b0001_0000;
+        iterate_processor_state(&mut test_state, &mut si_mem);
+        assert_eq!(test_state.reg_a, 0b0000_0001);
+        assert_eq!(test_state.flags.bits, 0b0000_0000);
+    }
+
+    #[test]
     fn sbb_step_reg_c() {
         let mut test_state = ProcessorState::new();
         let mut si_mem = MemMap::new();
