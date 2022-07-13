@@ -126,12 +126,12 @@ pub struct PortState {
     ///
     ///     (write ports 3,5,6 can be left unemulated, read port 1=$01 and 2=$00
     ///     will make the game run, but but only in attract mode)    
-    read_port_1: u8,
-    read_port_2: u8,
-    read_port_3: u8,
-    write_port_1: u8,
-    write_port_2: u8,
-    write_port_4: u8,
+    pub read_port_1: u8,
+    pub read_port_2: u8,
+    pub read_port_3: u8,
+    pub write_port_1: u8,
+    pub write_port_2: u8,
+    pub write_port_4: u8,
 }
 
 impl PortState {
@@ -252,6 +252,12 @@ impl MachineState {
     }
 }
 
+impl Default for MachineState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 fn map_keyboard_to_button(key: &str) -> Option<Button> {
     match key {
         "KeyA" => Some(Button::P1Left),
@@ -271,10 +277,9 @@ pub fn start_keyboard_listeners(m: &MachineState) {
     let window = web_sys::window().expect("no global `window` exists");
     let down_m = m.port_state.clone();
     let keydown_closure = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| {
-        let button = map_keyboard_to_button(&(event.code()));
-        if button.is_some() {
+        if let Some(button) = map_keyboard_to_button(&(event.code())) {
             let mut l_portstate = down_m.lock().unwrap();
-            l_portstate.button_down(button.unwrap());
+            l_portstate.button_down(button);
             console::log_1(&format!("Keydown: state is {:#?}", l_portstate).into());
         }
     }) as Box<dyn FnMut(_)>);
@@ -285,10 +290,9 @@ pub fn start_keyboard_listeners(m: &MachineState) {
 
     let up_m = m.port_state.clone();
     let keyup_closure = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| {
-        let button = map_keyboard_to_button(&(event.code()));
-        if button.is_some() {
+        if let Some(button) = map_keyboard_to_button(&(event.code())) {
             let mut l_portstate = up_m.lock().unwrap();
-            l_portstate.button_up(button.unwrap());
+            l_portstate.button_up(button);
             console::log_1(&format!("Keyup: state is {:#?}", l_portstate).into());
         }
     }) as Box<dyn FnMut(_)>);

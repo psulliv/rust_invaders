@@ -1,8 +1,8 @@
 mod debug_utils;
+mod display_output;
 mod eighty_eighty_emulator;
 mod machine;
 mod space_invaders_rom;
-
 use eighty_eighty_emulator::{MemMap, ProcessorState};
 use machine::{start_keyboard_listeners, MachineState};
 use wasm_bindgen::prelude::*;
@@ -18,6 +18,7 @@ pub fn js_entry_point() -> Result<(), JsValue> {
 
 pub fn emulation_loop(mut this_machine: MachineState) -> String {
     loop {
+        crate::display_output::write_canvas_element(&this_machine);
         this_machine.iterate_processor_state();
     }
 }
