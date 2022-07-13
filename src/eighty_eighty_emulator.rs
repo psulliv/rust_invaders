@@ -2047,14 +2047,11 @@ fn opcode_sui(state: &mut ProcessorState, mem_map: &mut MemMap) {
     // 1 | 1 | 0 | 1 | 0 | 1 | 1 | 0
     let second_byte = mem_map[state.prog_counter + 1];
     state.prog_counter += 2;
-    println!("second_byte is {:?}", &second_byte);
     let twos_complement = second_byte.wrapping_neg();
-    println!("twos comp is {:?}", &twos_complement);
     let low_add = (state.reg_a & 0b0000_1111) + (twos_complement & 0b0000_1111);
     let (sum, overflow) = state.reg_a.overflowing_add(twos_complement);
     let aux_carry = low_add & 0b0001_0000 != 0;
     state.reg_a = sum;
-    println!("sum is {:?}", &sum);
     update_arithmetic_flags(state, ArithmeticOpType::Subtraction, overflow, aux_carry);
 }
 
