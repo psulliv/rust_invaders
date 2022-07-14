@@ -59,21 +59,62 @@ impl ProcessorState {
     // Gets value from a register, given its bit pattern.
     pub fn get_reg_value(&self, pattern: RegisterBitPattern) -> Option<u8> {
         match pattern {
-            RegisterBitPattern::A => {Some(self.reg_a)}
-            RegisterBitPattern::B => {Some(self.reg_b)}
-            RegisterBitPattern::C => {Some(self.reg_c)}
-            RegisterBitPattern::D => {Some(self.reg_d)}
-            RegisterBitPattern::E => {Some(self.reg_e)}
-            RegisterBitPattern::H => {Some(self.reg_h)}
-            RegisterBitPattern::L => {Some(self.reg_l)}
-            RegisterBitPattern::Other => {None}
+            RegisterBitPattern::A => Some(self.reg_a),
+            RegisterBitPattern::B => Some(self.reg_b),
+            RegisterBitPattern::C => Some(self.reg_c),
+            RegisterBitPattern::D => Some(self.reg_d),
+            RegisterBitPattern::E => Some(self.reg_e),
+            RegisterBitPattern::H => Some(self.reg_h),
+            RegisterBitPattern::L => Some(self.reg_l),
+            RegisterBitPattern::Other => None,
+        }
+    }
+
+    // Gets value from a register, given its bit pattern.
+    pub fn set_reg_value(&self, pattern: RegisterBitPattern, value: u8) -> Option<()> {
+        match pattern {
+            RegisterBitPattern::A => {
+                state.reg_a = value;
+                Some(())
+            }
+            RegisterBitPattern::B => {
+                state.reg_b = value;
+                Some(())
+            }
+            RegisterBitPattern::C => {
+                state.reg_c = value;
+                Some(())
+            }
+            RegisterBitPattern::D => {
+                state.reg_d = value;
+                Some(())
+            }
+            RegisterBitPattern::E => {
+                state.reg_e = value;
+                Some(())
+            }
+            RegisterBitPattern::H => {
+                state.reg_h = value;
+                Some(())
+            }
+            RegisterBitPattern::L => {
+                self.reg_l = value;
+                Some(())
+            }
+            RegisterBitPattern::Other => None,
         }
     }
 
     // Gets value at the address indicated by the register pair bit pattern
     pub fn get_mem_value(&mut self, reg_pair: RPairBitPattern, mem_map: &MemMap) -> u8 {
-            let addr = self.get_rp(reg_pair);
-            mem_map[addr]
+        let addr = self.get_rp(reg_pair);
+        mem_map[addr]
+    }
+
+    // Gets value at the address indicated by the register pair bit pattern
+    pub fn set_mem_value(&mut self, reg_pair: RPairBitPattern, mem_map: &MemMap, value: u8) {
+        let addr = self.get_rp(reg_pair);
+        mem_map[addr] = value;
     }
 
     /// This uses the register pair bits from the opcode to
@@ -1673,9 +1714,18 @@ enum ArithmeticOpType {
 }
 
 // Clear all flags affected by arithmetic operations, then set flags as needed.
-fn update_arithmetic_flags(state: &mut ProcessorState, op_type: ArithmeticOpType, carry: bool, aux_carry: bool) {
+fn update_arithmetic_flags(
+    state: &mut ProcessorState,
+    op_type: ArithmeticOpType,
+    carry: bool,
+    aux_carry: bool,
+) {
     let is_addition = op_type == ArithmeticOpType::Addition;
-    state.flags &= !ConditionFlags::Z & !ConditionFlags::S & !ConditionFlags::P & !ConditionFlags::CY & !ConditionFlags::AC;
+    state.flags &= !ConditionFlags::Z
+        & !ConditionFlags::S
+        & !ConditionFlags::P
+        & !ConditionFlags::CY
+        & !ConditionFlags::AC;
     if state.reg_a == 0 {
         state.flags |= ConditionFlags::Z;
     }
@@ -1689,10 +1739,10 @@ fn update_arithmetic_flags(state: &mut ProcessorState, op_type: ArithmeticOpType
         state.flags |= ConditionFlags::CY;
     }
     if !carry && !is_addition {
-    // If there is no carry out of the high-order bit position, indicating that
-    // a borrow occurred, the Carry bit is set; otherwise it is reset.
-    // Note that this differs from an add operation, which resets the carry if
-    // no overflow occurs.
+        // If there is no carry out of the high-order bit position, indicating that
+        // a borrow occurred, the Carry bit is set; otherwise it is reset.
+        // Note that this differs from an add operation, which resets the carry if
+        // no overflow occurs.
         state.flags |= ConditionFlags::CY;
     }
     if aux_carry {
@@ -1707,7 +1757,7 @@ fn update_arithmetic_flags(state: &mut ProcessorState, op_type: ArithmeticOpType
 /// ADD M (Add memory)
 /// (A) ~ (A) + ((H) (L))
 /// The content of the memory location whose address is
-/// contained in the H and L registers is added to the 
+/// contained in the H and L registers is added to the
 /// content of the accumulator. The result is placed in the
 /// accumulator.
 fn opcode_add(state: &mut ProcessorState, mem_map: &mut MemMap) {
@@ -1905,12 +1955,12 @@ fn opcode_sui(state: &mut ProcessorState, mem_map: &mut MemMap) {
 fn opcode_sbb(state: &mut ProcessorState, mem_map: &mut MemMap) {
     // 1 | 0 | 0 | 1 | 1 | S | S | S
     // or
-    // 1 | 0 | 0 | 1 | 1 | 1 | 1 | 0  
+    // 1 | 0 | 0 | 1 | 1 | 1 | 1 | 0
     let cur_instruction = mem_map[state.prog_counter];
     let src = get_source_register_bit_pattern(cur_instruction);
     state.prog_counter += 1;
     let subtrahend: u8;
-    
+
     match state.get_reg_value(src) {
         Some(value) => {
             subtrahend = value;
@@ -1952,6 +2002,162 @@ fn opcode_sbi(state: &mut ProcessorState, mem_map: &mut MemMap) {
     let aux_carry = low_add & 0b0001_0000 != 0;
     state.reg_a = sum;
     update_arithmetic_flags(state, ArithmeticOpType::Subtraction, overflow, aux_carry);
+}
+
+/// INR r (Increment Register)
+/// (r) ~ (r) + 1
+/// The content of register r is incremented by one.
+/// Note: All condition flags except CY are affected.
+/// INR M (Increment Memory)
+/// ((H) (L)) ~ ((H) (L)) + 1
+/// The content of the memory location whose address
+/// is contained in the Hand L registers is incremented
+/// by one. Note: All condition flags except CY are
+/// affected.
+fn opcode_inr(state: &mut ProcessorState, mem_map: &mut MemMap) {
+    // 0 | 0 | D | D | D | 1 | 0 | 0
+    // or
+    // 0 | 0 | 1 | 1 | 0 | 1 | 0 | 0
+    let cur_instruction = mem_map[state.prog_counter];
+    let src = ((cur_instruction & 0b00_111_000) >> 3).into();
+    state.prog_counter += 1;
+
+    let result: u8;
+    let current = state.get_reg_value(src);
+    match current {
+        Some(current) => {
+            result = current + 1;
+            state.set_reg_value(src, result);
+        }
+        None => {
+            result = state.get_mem_value(RPairBitPattern::HL, mem_map) + 1;
+            state.set_mem_value(RPairBitPattern::HL, mem_map, result);
+        }
+    }
+
+    // Reset all flags except CY, then set flags as needed.
+    state.flags &=
+        !ConditionFlags::Z & !ConditionFlags::S & !ConditionFlags::P & !ConditionFlags::AC;
+    if result == 0 {
+        state.flags |= ConditionFlags::Z;
+    }
+    if (result & 0b1000_0000) >> 7 == 1 {
+        state.flags |= ConditionFlags::S;
+    }
+    if result.count_ones() % 2 == 0 {
+        state.flags |= ConditionFlags::P;
+    }
+    if result & 0b0000_1111 != 0b0000_1111 {
+        state.flags |= ConditionFlags::AC;
+    }
+}
+
+/// DCR r (Decrement Register)
+/// (r) ~ (r) - 1
+/// The content of register r is decremented by one.
+/// Note: All condition flags except CY are affected.
+/// INR M (Decrement Memory)
+/// ((H) (L)) ~ ((H) (L)) - 1
+/// The content of the memory location whose address
+/// is contained in the Hand L registers is decremented
+/// by one. Note: All condition flags except CY are
+/// affected.
+fn opcode_dcr(state: &mut ProcessorState, mem_map: &mut MemMap) {
+    // 0 | 0 | D | D | D | 1 | 0 | 1
+    // or
+    // 0 | 0 | 1 | 1 | 0 | 1 | 0 | 1
+    let cur_instruction = mem_map[state.prog_counter];
+    let src = ((cur_instruction & 0b00_111_000) >> 3).into();
+    state.prog_counter += 1;
+
+    let result: u8;
+    let current = state.get_reg_value(src);
+    match current {
+        Some(current) => {
+            result = current - 1;
+            state.set_reg_value(src, result);
+        }
+        None => {
+            result = state.get_mem_value(RPairBitPattern::HL, mem_map) - 1;
+            state.set_mem_value(RPairBitPattern::HL, mem_map, result);
+        }
+    }
+
+    // Reset all flags except CY, then set flags as needed.
+    state.flags &=
+        !ConditionFlags::Z & !ConditionFlags::S & !ConditionFlags::P & !ConditionFlags::AC;
+    if result == 0 {
+        state.flags |= ConditionFlags::Z;
+    }
+    if (result & 0b1000_0000) >> 7 == 1 {
+        state.flags |= ConditionFlags::S;
+    }
+    if result.count_ones() % 2 == 0 {
+        state.flags |= ConditionFlags::P;
+    }
+    if result & 0b0000_1111 != 0b0000_1111 {
+        state.flags |= ConditionFlags::AC;
+    }
+}
+
+/// DCX rp (Decrement register pair)
+/// (rh) (rl) ~ (rh) (rl) - 1
+/// The content of the register pair rp is decremented
+/// by one. Note: No condition flags are affected.
+fn opcode_dcx(state: &mut ProcessorState, mem_map: &mut MemMap) {
+    let cur_instruction = mem_map[state.prog_counter];
+    let rp_bits = get_register_pair_bit_pattern(cur_instruction);
+    let rp_16 = state.get_rp(rp_bits);
+    state.set_rp(rp_16 - 1, rp_bits);
+    state.prog_counter += 1;
+}
+
+/// DAD rp (Add register pair to H and L)
+/// (H) (L) ~ (H) (L) + (rh) (rl)
+/// The content of the register pair rp is added to the
+/// content of the register pair H and L. The result is
+/// placed in the register pair H and L. Note: Only the
+/// CY flag is affected. It is set if there is a carry out of
+/// the double precision add; otherwise it is reset.
+fn opcode_dad(state: &mut ProcessorState, mem_map: &mut MemMap) {
+    // 0 | 0 | R | P | 1 | 0 | 0 | 1
+    let cur_instruction = mem_map[state.prog_counter];
+    let src = get_register_pair_bit_pattern(cur_instruction);
+    state.prog_counter += 1;
+    let rp_value = state.get_rp(src);
+    let hl_value = state.get_rp(RPairBitPattern::HL);
+    let (sum, overflow) = hl_value.wrapping_add(rp_value);
+    state.reg_h = 0xFF00 & sum >> 8 as u8;
+    state.reg_l = 0x00FF & sum as u8;
+
+    // Set/reset CY flag only.
+    if overflow {
+        state.flags |= ConditionFlags::CY;
+    } else {
+        state.flags ^= ConditionFlags::CY;
+    }
+}
+
+/// DAA (Decimal Adjust Accumulator)
+/// The eight-bit number in the accumulator is adjusted
+/// to form two four-bit Binary-Coded-Decimal digits by
+/// the following process:
+/// 1. If the value of the least significant 4 bits of the
+/// accumulator is greater than 9 or if the AC flag
+/// is set, 6 is added to the accumulator.
+/// If the value of the most significant 4 bits of the
+/// accumulator is now greater than 9, or if the CY
+/// flag is set, 6 is added to the most significant 4
+/// bits of the accumulator.
+/// NOTE: All flags are affected.
+fn opcode_daa(state: &mut ProcessorState, mem_map: &mut MemMap) {
+    // 0 | 0 | 1 | 0 | 0 | 1 | 1 | 1
+    if state.reg_a & 0b0000_1111 > 0b1001 || state.flags & ConditionBitPattern::AC == ConditionBitPattern::AC {
+        state.reg_a += 0b0110;
+    }
+    if state.reg_a & 0b1111_0000 >> 4 > 9 || state.flags & ConditionBitPattern::AC == ConditionBitPattern::AC {
+        state.reg_a += (0b0110 << 4);
+    }
 }
 
 // DDD or SSS REGISTER NAME
@@ -2467,7 +2673,10 @@ pub mod tests {
         machine_state.processor_state.reg_a = 0b1111_1111;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b1111_1110);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::CY | ConditionFlags::S | ConditionFlags::AC)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::CY | ConditionFlags::S | ConditionFlags::AC
+        )
     }
 
     #[wasm_bindgen_test]
@@ -2481,7 +2690,10 @@ pub mod tests {
         machine_state.processor_state.reg_b = 0b0000_0000;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b0000_0000);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::Z | ConditionFlags::P)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::Z | ConditionFlags::P
+        )
     }
 
     #[wasm_bindgen_test]
@@ -2495,7 +2707,10 @@ pub mod tests {
         machine_state.processor_state.reg_c = 0b1010_1010;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b1111_1111);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::S | ConditionFlags::P)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::S | ConditionFlags::P
+        )
     }
 
     #[wasm_bindgen_test]
@@ -2509,7 +2724,10 @@ pub mod tests {
         machine_state.processor_state.reg_d = 0b1111_1111;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b1111_1111);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::S | ConditionFlags::P)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::S | ConditionFlags::P
+        )
     }
 
     #[wasm_bindgen_test]
@@ -2523,7 +2741,10 @@ pub mod tests {
         machine_state.processor_state.reg_e = 0b0000_0001;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b0000_0000);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::Z | ConditionFlags::CY | ConditionFlags::AC | ConditionFlags::P)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::Z | ConditionFlags::CY | ConditionFlags::AC | ConditionFlags::P
+        )
     }
 
     #[wasm_bindgen_test]
@@ -2537,7 +2758,10 @@ pub mod tests {
         machine_state.processor_state.reg_h = 0b1001_1001;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b0011_0010);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::CY | ConditionFlags::AC)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::CY | ConditionFlags::AC
+        )
     }
 
     #[wasm_bindgen_test]
@@ -2551,7 +2775,10 @@ pub mod tests {
         machine_state.processor_state.reg_l = 0b1111_1110;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b1111_1111);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::S | ConditionFlags::P)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::S | ConditionFlags::P
+        )
     }
 
     #[wasm_bindgen_test]
@@ -2561,8 +2788,10 @@ pub mod tests {
         test_rom[0] = 0b10_000_000 | RegisterBitPattern::Other as u8;
         machine_state.mem_map.rom = test_rom;
         machine_state.processor_state.reg_a = 0b0000_0001;
-        machine_state.processor_state.reg_h = ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) >> 8) as u8;
-        machine_state.processor_state.reg_l = ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) & 0x00ff) as u8;
+        machine_state.processor_state.reg_h =
+            ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) >> 8) as u8;
+        machine_state.processor_state.reg_l =
+            ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) & 0x00ff) as u8;
         machine_state.processor_state.reg_l += 0b1000;
         let address = machine_state.processor_state.get_rp(RPairBitPattern::HL);
         machine_state.mem_map[address] = 0b0001_0000;
@@ -2608,7 +2837,10 @@ pub mod tests {
         machine_state.processor_state.reg_b = 0b0000_1111;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b0001_0001);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::P | ConditionFlags::AC)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::P | ConditionFlags::AC
+        )
     }
 
     #[wasm_bindgen_test]
@@ -2622,7 +2854,10 @@ pub mod tests {
         machine_state.processor_state.reg_c = 0b1111_1111;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b0000_0000);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::P | ConditionFlags::AC | ConditionFlags::CY | ConditionFlags::Z)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::P | ConditionFlags::AC | ConditionFlags::CY | ConditionFlags::Z
+        )
     }
 
     #[wasm_bindgen_test]
@@ -2636,7 +2871,10 @@ pub mod tests {
         machine_state.processor_state.reg_d = 0b1111_1111;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b0000_0000);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::P | ConditionFlags::AC | ConditionFlags::CY | ConditionFlags::Z)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::P | ConditionFlags::AC | ConditionFlags::CY | ConditionFlags::Z
+        )
     }
 
     #[wasm_bindgen_test]
@@ -2650,7 +2888,10 @@ pub mod tests {
         machine_state.processor_state.reg_e = 0b0000_0001;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b0000_0001);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::AC | ConditionFlags::CY)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::AC | ConditionFlags::CY
+        )
     }
 
     #[wasm_bindgen_test]
@@ -2664,7 +2905,10 @@ pub mod tests {
         machine_state.processor_state.reg_h = 0b1001_1001;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b0011_0010);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::AC | ConditionFlags::CY)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::AC | ConditionFlags::CY
+        )
     }
 
     #[wasm_bindgen_test]
@@ -2689,9 +2933,12 @@ pub mod tests {
         machine_state.mem_map.rom = test_rom;
         machine_state.processor_state.flags.bits = 0b0000_0001;
         machine_state.processor_state.reg_a = 0b0000_0001;
-        machine_state.processor_state.reg_h = ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) >> 8) as u8;
-        machine_state.processor_state.reg_l = ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) & 0x00ff) as u8;
-        let address = ((machine_state.processor_state.reg_h as u16) << 8) + machine_state.processor_state.reg_l as u16;
+        machine_state.processor_state.reg_h =
+            ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) >> 8) as u8;
+        machine_state.processor_state.reg_l =
+            ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) & 0x00ff) as u8;
+        let address = ((machine_state.processor_state.reg_h as u16) << 8)
+            + machine_state.processor_state.reg_l as u16;
         machine_state.mem_map[address.into()] = 0b0001_0000;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b0001_0010);
@@ -2709,7 +2956,10 @@ pub mod tests {
         machine_state.processor_state.reg_a = 0b0000_0001;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b0001_0001);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::AC | ConditionFlags::P)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::AC | ConditionFlags::P
+        )
     }
 
     #[wasm_bindgen_test]
@@ -2721,7 +2971,10 @@ pub mod tests {
         machine_state.processor_state.reg_a = 0b1111_1111;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b0000_0000);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::Z | ConditionFlags::P | ConditionFlags::AC)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::Z | ConditionFlags::P | ConditionFlags::AC
+        )
     }
 
     #[wasm_bindgen_test]
@@ -2734,7 +2987,10 @@ pub mod tests {
         machine_state.processor_state.reg_b = 0b0000_0000;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b0000_0000);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::Z | ConditionFlags::P | ConditionFlags::CY)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::Z | ConditionFlags::P | ConditionFlags::CY
+        )
     }
 
     #[wasm_bindgen_test]
@@ -2747,7 +3003,10 @@ pub mod tests {
         machine_state.processor_state.reg_c = 0b1010_1010;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b1010_1011);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::S | ConditionFlags::CY)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::S | ConditionFlags::CY
+        )
     }
 
     #[wasm_bindgen_test]
@@ -2773,7 +3032,10 @@ pub mod tests {
         machine_state.processor_state.reg_e = 0b0000_0001;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b1111_1110);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::S | ConditionFlags::AC)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::S | ConditionFlags::AC
+        )
     }
 
     #[wasm_bindgen_test]
@@ -2786,7 +3048,10 @@ pub mod tests {
         machine_state.processor_state.reg_h = 0b1001_1001;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b0000_0000);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::Z | ConditionFlags::P | ConditionFlags::AC)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::Z | ConditionFlags::P | ConditionFlags::AC
+        )
     }
 
     #[wasm_bindgen_test]
@@ -2799,7 +3064,10 @@ pub mod tests {
         machine_state.processor_state.reg_l = 0b1111_1110;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b0000_0011);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::P | ConditionFlags::CY)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::P | ConditionFlags::CY
+        )
     }
 
     #[wasm_bindgen_test]
@@ -2809,9 +3077,12 @@ pub mod tests {
         test_rom[0] = 0b10_010_000 | (RegisterBitPattern::Other as u8);
         machine_state.mem_map.rom = test_rom;
         machine_state.processor_state.reg_a = 0b0001_0001;
-        machine_state.processor_state.reg_h = ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) >> 8) as u8;
-        machine_state.processor_state.reg_l = ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) & 0x00ff) as u8;
-        let address = ((machine_state.processor_state.reg_h as u16) << 8) + machine_state.processor_state.reg_l as u16;
+        machine_state.processor_state.reg_h =
+            ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) >> 8) as u8;
+        machine_state.processor_state.reg_l =
+            ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) & 0x00ff) as u8;
+        let address = ((machine_state.processor_state.reg_h as u16) << 8)
+            + machine_state.processor_state.reg_l as u16;
         machine_state.mem_map[address.into()] = 0b0001_0000;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b0000_0001);
