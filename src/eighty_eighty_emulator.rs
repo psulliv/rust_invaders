@@ -2007,7 +2007,7 @@ fn opcode_inr(state: &mut ProcessorState, mem_map: &mut MemMap) {
             state.set_reg_value(src, result);
         }
         None => {
-            low_add = state.get_mem_value(RPairBitPattern::HL, mem_map) & 0b0000_1111 + 0b0000_0001;
+            low_add = (state.get_mem_value(RPairBitPattern::HL, mem_map) & 0b0000_1111) + 0b0000_0001;
             result = state
                 .get_mem_value(RPairBitPattern::HL, mem_map)
                 .wrapping_add(0b0000_0001);
