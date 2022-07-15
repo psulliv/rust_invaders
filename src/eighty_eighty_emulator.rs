@@ -489,7 +489,7 @@ impl MachineState {
                 opcode_mvi(state, mem_map);
             }
             0x27 => {
-                opcode_daa(state, mem_map);
+                opcode_daa(state);
             }
             0x28 => {
                 panic!("    -                       ");
@@ -2137,7 +2137,7 @@ fn opcode_dad(state: &mut ProcessorState, mem_map: &mut MemMap) {
 /// flag is set, 6 is added to the most significant 4
 /// bits of the accumulator.
 /// NOTE: All flags are affected.
-fn opcode_daa(state: &mut ProcessorState, mem_map: &mut MemMap) {
+fn opcode_daa(state: &mut ProcessorState) {
     // 0 | 0 | 1 | 0 | 0 | 1 | 1 | 1
     let low = state.reg_a & 0b0000_1111;
     let high = state.reg_a & 0b1111_0000 >> 4;
