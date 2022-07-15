@@ -2,10 +2,12 @@
 
 #![allow(clippy::unusual_byte_groupings)]
 
+use crate::machine::PortState;
 use crate::MachineState;
 use bitflags::bitflags;
 use std::convert::From;
 use std::mem;
+use std::sync::{Arc, Mutex};
 use std::{
     fmt::Debug,
     ops::{Index, IndexMut},
@@ -36,6 +38,7 @@ pub struct ProcessorState {
     stack_pointer: u16,
     prog_counter: u16,
     flags: ConditionFlags,
+    interrupts_enabled: bool,
 }
 
 impl ProcessorState {
@@ -53,6 +56,7 @@ impl ProcessorState {
             flags: ConditionFlags {
                 bits: (0b0000_0000),
             },
+            interrupts_enabled: false,
         }
     }
 
@@ -196,9 +200,21 @@ impl ProcessorState {
     }
 }
 
+impl Default for ProcessorState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub struct MemMap {
-    rom: [u8; space_invaders_rom::SPACE_INVADERS_ROM.len()],
-    rw_mem: Vec<u8>,
+    pub rom: [u8; space_invaders_rom::SPACE_INVADERS_ROM.len()],
+    pub rw_mem: Vec<u8>,
+}
+
+impl Default for MemMap {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MemMap {
@@ -346,10 +362,11 @@ fn get_destination_register_bit_pattern(cur_instruction: u8) -> RegisterBitPatte
 
 impl MachineState {
     /// Match statement for operation decoding
-    pub fn iterate_processor_state(self: &mut Self) {
+    pub fn iterate_processor_state(&mut self) {
         // get the next opcode at the current program counter
         let mem_map = &mut self.mem_map;
         let state = &mut self.processor_state;
+        let ports = self.port_state.clone();
         let cur_instruction = mem_map[state.prog_counter];
         console::log_1(&debug_print_op_code(cur_instruction).into());
         match cur_instruction {
@@ -787,7 +804,7 @@ impl MachineState {
                 // 1
             }
             0x76 => {
-                panic!("    HLT     1               special");
+                opcode_halt(state, mem_map);
                 // 1
             }
             0x77 => {
@@ -1117,7 +1134,7 @@ impl MachineState {
                 // 3
             }
             0xd3 => {
-                panic!("    OUT D8  2               special");
+                opcode_out(state, mem_map, ports);
                 // 2
             }
             0xd4 => {
@@ -1136,23 +1153,19 @@ impl MachineState {
                 opcode_ret(state, mem_map);
             }
             0xd9 => {
-                panic!("    -                       ");
-                // 1
+                panic!(" Bogus opcode parsed, bailing ");
             }
             0xda => {
                 opcode_jmp(state, mem_map);
-                // 3
             }
             0xdb => {
-                panic!("    IN D8   2               special");
-                // 2
+                opcode_in(state, mem_map, ports);
             }
             0xdc => {
                 opcode_call(state, mem_map);
             }
             0xdd => {
-                panic!("    -                       ");
-                // 1
+                panic!(" Bogus opcode parsed, bailing ");
             }
             0xde => {
                 opcode_sbi(state, mem_map);
@@ -1168,7 +1181,6 @@ impl MachineState {
             }
             0xe2 => {
                 opcode_jmp(state, mem_map);
-                // 3
             }
             0xe3 => {
                 opcode_xthl(state, mem_map);
@@ -1194,7 +1206,6 @@ impl MachineState {
             }
             0xea => {
                 opcode_jmp(state, mem_map);
-                // 3
             }
             0xeb => {
                 opcode_xchg(state, mem_map);
@@ -1203,8 +1214,7 @@ impl MachineState {
                 opcode_call(state, mem_map);
             }
             0xed => {
-                panic!("    -                       ");
-                // 1
+                panic!(" Bogus opcode parsed, bailing ");
             }
             0xee => {
                 panic!("    XRI D8  2       Z, S, P, CY, AC A <- A ^ data");
@@ -1224,8 +1234,7 @@ impl MachineState {
                 // 3
             }
             0xf3 => {
-                panic!("    DI      1               special");
-                // 1
+                opcode_di(state, mem_map);
             }
             0xf4 => {
                 opcode_call(state, mem_map);
@@ -1248,18 +1257,15 @@ impl MachineState {
             }
             0xfa => {
                 opcode_jmp(state, mem_map);
-                // 3
             }
             0xfb => {
-                panic!("    EI      1               special");
-                // 1
+                opcode_ei(state, mem_map);
             }
             0xfc => {
                 opcode_call(state, mem_map);
             }
             0xfd => {
-                panic!("    -                       ");
-                // 1
+                panic!(" Bogus opcode parsed, bailing");
             }
             0xfe => {
                 panic!("    CPI D8  2       Z, S, P, CY, AC A - data");
@@ -1743,22 +1749,19 @@ fn opcode_add(state: &mut ProcessorState, mem_map: &mut MemMap) {
     let cur_instruction = mem_map[state.prog_counter];
     let src = get_source_register_bit_pattern(cur_instruction);
     state.prog_counter += 1;
-    let addend: u8;
 
-    match state.get_reg_value(src) {
-        Some(value) => {
-            addend = value;
-        }
+    let addend = match state.get_reg_value(src) {
+        Some(value) => value,
         None => {
             // Then this is a 1 | 0 | 0 | 0 | 0 | 1 | 1 | 0
             // format opcode subtracting value located at the
             // memory address in pair H-L from accumulator.
-            addend = state.get_mem_value(RPairBitPattern::HL, mem_map)
+            state.get_mem_value(RPairBitPattern::HL, mem_map)
         }
-    }
+    };
     // Add first four bits to detect carry to fifth.
     let low_add = (state.reg_a & 0x0f) + (addend & 0x0f);
-    let aux_carry = low_add & 0x10 != 0;
+    let aux_carry = low_add & 0b0001_0000 != 0;
 
     // Perform addition, move sum into accumulator.
     let (sum, overflow) = state.reg_a.overflowing_add(addend);
@@ -1801,19 +1804,16 @@ fn opcode_adc(state: &mut ProcessorState, mem_map: &mut MemMap) {
     let cur_instruction = mem_map[state.prog_counter];
     let src = get_source_register_bit_pattern(cur_instruction);
     state.prog_counter += 1;
-    let addend: u8;
 
-    match state.get_reg_value(src) {
-        Some(value) => {
-            addend = value;
-        }
+    let addend = match state.get_reg_value(src) {
+        Some(value) => value,
         None => {
             // Then this is a 1 | 0 | 0 | 0 | 0 | 1 | 1 | 0
             // format opcode subtracting value located at the
             // memory address in pair H-L from accumulator.
-            addend = state.get_mem_value(RPairBitPattern::HL, mem_map)
+            state.get_mem_value(RPairBitPattern::HL, mem_map)
         }
-    }
+    };
 
     let cf_state: u8 = state.check_condition(ConditionBitPattern::C).into();
 
@@ -1874,19 +1874,16 @@ fn opcode_sub(state: &mut ProcessorState, mem_map: &mut MemMap) {
     let cur_instruction = mem_map[state.prog_counter];
     let src = get_source_register_bit_pattern(cur_instruction);
     state.prog_counter += 1;
-    let subtrahend: u8;
 
-    match state.get_reg_value(src) {
-        Some(value) => {
-            subtrahend = value;
-        }
+    let subtrahend = match state.get_reg_value(src) {
+        Some(value) => value,
         None => {
             // Then this is a 1 | 0 | 0 | 0 | 0 | 1 | 1 | 0
             // format opcode subtracting value located at the
             // memory address in pair H-L from accumulator.
-            subtrahend = state.get_mem_value(RPairBitPattern::HL, mem_map)
+            state.get_mem_value(RPairBitPattern::HL, mem_map)
         }
-    }
+    };
     let twos_complement = subtrahend.wrapping_neg();
 
     // Add first four bits to detect carry to fifth.
@@ -1934,19 +1931,16 @@ fn opcode_sbb(state: &mut ProcessorState, mem_map: &mut MemMap) {
     let cur_instruction = mem_map[state.prog_counter];
     let src = get_source_register_bit_pattern(cur_instruction);
     state.prog_counter += 1;
-    let subtrahend: u8;
 
-    match state.get_reg_value(src) {
-        Some(value) => {
-            subtrahend = value;
-        }
+    let subtrahend = match state.get_reg_value(src) {
+        Some(value) => value,
         None => {
             // Then this is a 1 | 0 | 0 | 0 | 0 | 1 | 1 | 0
             // format opcode subtracting value located at the
             // memory address in pair H-L from accumulator.
-            subtrahend = state.get_mem_value(RPairBitPattern::HL, mem_map)
+            state.get_mem_value(RPairBitPattern::HL, mem_map)
         }
-    }
+    };
     // Perform subtraction using two's complement and set flags as needed.
     let cf_state = state.check_condition(ConditionBitPattern::C);
     let twos_complement = (subtrahend + cf_state as u8).wrapping_neg();
@@ -2061,7 +2055,7 @@ fn opcode_dcr(state: &mut ProcessorState, mem_map: &mut MemMap) {
             state.set_reg_value(src, result);
         }
         None => {
-            low_add = state.get_mem_value(RPairBitPattern::HL, mem_map) & 0x0f + 0x0f;
+            low_add = (state.get_mem_value(RPairBitPattern::HL, mem_map) & 0x0f) + 0x0f;
             result = state
                 .get_mem_value(RPairBitPattern::HL, mem_map)
                 .wrapping_sub(0x01);
@@ -2342,6 +2336,80 @@ fn opcode_xthl(state: &mut ProcessorState, mem_map: &mut MemMap) {
 fn opcode_sphl(state: &mut ProcessorState, _mem_map: &mut MemMap) {
     state.stack_pointer = state.get_rp(RPairBitPattern::HL);
     state.prog_counter += 1;
+}
+
+// Todo: get the shift register working
+
+/// IN port (I nput)
+/// (A) ~ (data)
+/// The data placed on the eight bit bi-directional data
+/// bus by the specified port is moved to register A.
+fn opcode_in(state: &mut ProcessorState, mem_map: &mut MemMap, ports: Arc<Mutex<PortState>>) {
+    let port_state = ports.lock().unwrap();
+    let second_byte = mem_map[state.prog_counter + 1];
+    match second_byte {
+        0x01 => {
+            state.reg_a = port_state.read_port_1;
+        }
+        0x02 => {
+            state.reg_a = port_state.read_port_2;
+        }
+        0x03 => {
+	    // shift register not working yet
+            state.reg_a = port_state.read_port_3;
+        }
+        _ => {
+            panic!("Unexpected port in opcode_in")
+        }
+    }
+}
+
+/// OUT port (Output)
+/// (data) ~ (A)
+/// The content of register A is placed on the eight bit
+/// bi-directional data bus for transmission to the spec-
+/// ified port.
+fn opcode_out(state: &mut ProcessorState, mem_map: &mut MemMap, ports: Arc<Mutex<PortState>>) {
+    let mut port_state = ports.lock().unwrap();
+    let second_byte = mem_map[state.prog_counter + 1];
+    match second_byte {
+        0x01 => {
+            port_state.write_port_1 = state.reg_a;
+        }
+        0x02 => {
+            port_state.write_port_2 = state.reg_a;
+        }
+        0x04 => {
+            port_state.write_port_4 = state.reg_a;
+        }
+        _ => {
+            panic!("Unexpected port in opcode_out")
+        }
+    }
+}
+
+/// EI (Enable interrupts)
+/// The interrupt system is enabled following the execu-
+/// tion of the next instruction.
+fn opcode_ei(state: &mut ProcessorState, _mem_map: &mut MemMap) {
+    // The reference implementation at emulators101 didn't care much
+    // about the interrupt timer only being enabled after the next
+    // instruction and neither will we.
+    state.interrupts_enabled = true;
+}
+
+/// 01 (Disable interrupts)
+/// The interrupt system is disabled immediately fol-
+/// lowing the execution of the 01 instruction.
+fn opcode_di(state: &mut ProcessorState, _mem_map: &mut MemMap) {
+    state.interrupts_enabled = false;
+}
+
+/// HLT (Halt)
+/// The processor is stopped. The registers and flags are
+/// unaffected.
+fn opcode_halt(_state: &mut ProcessorState, _mem_map: &mut MemMap) {
+    std::process::exit(0);
 }
 
 // Todo: swap out register pair register condition flag and other bit twiddling
