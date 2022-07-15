@@ -72,7 +72,6 @@ impl ProcessorState {
 
     // Sets register value
     pub fn set_reg_value(&mut self, pattern: RegisterBitPattern, value: u8) -> Option<()> {
-        let reg: &u8;
         match pattern {
             RegisterBitPattern::A => {
                 self.reg_a = value;
@@ -387,8 +386,7 @@ impl MachineState {
                 // 1
             }
             0x09 => {
-                panic!("    DAD B   1       CY      HL = HL + BC");
-                // 1
+                opcode_dad(state, mem_map);
             }
             0x0a => {
                 opcode_ldax(state, mem_map);
@@ -444,8 +442,7 @@ impl MachineState {
                 // 1
             }
             0x19 => {
-                panic!("    DAD D   1       CY      HL = HL + DE");
-                // 1
+                opcode_dad(state, mem_map);
             }
             0x1a => {
                 opcode_ldax(state, mem_map);
@@ -492,16 +489,14 @@ impl MachineState {
                 opcode_mvi(state, mem_map);
             }
             0x27 => {
-                panic!("    DAA     1               special");
-                // 1
+                opcode_daa(state, mem_map);
             }
             0x28 => {
                 panic!("    -                       ");
                 // 1
             }
             0x29 => {
-                panic!("    DAD H   1       CY      HL = HL + HI");
-                // 1
+                opcode_dad(state, mem_map);
             }
             0x2a => {
                 opcode_lhld(state, mem_map);
@@ -554,8 +549,7 @@ impl MachineState {
                 // 1
             }
             0x39 => {
-                panic!("    DAD SP  1       CY      HL = HL + SP");
-                // 1
+                opcode_dad(state, mem_map);
             }
             0x3a => {
                 opcode_lda(state, mem_map);
@@ -2014,7 +2008,9 @@ fn opcode_inr(state: &mut ProcessorState, mem_map: &mut MemMap) {
         }
         None => {
             low_add = state.get_mem_value(RPairBitPattern::HL, mem_map) & 0b0000_1111 + 0b0000_0001;
-            result = state.get_mem_value(RPairBitPattern::HL, mem_map).wrapping_add(0b0000_0001);
+            result = state
+                .get_mem_value(RPairBitPattern::HL, mem_map)
+                .wrapping_add(0b0000_0001);
             state.set_mem_value(RPairBitPattern::HL, mem_map, result);
         }
     }
@@ -2060,13 +2056,15 @@ fn opcode_dcr(state: &mut ProcessorState, mem_map: &mut MemMap) {
     let current = state.get_reg_value(src);
     match current {
         Some(current) => {
-            low_add = (current & 0b0000_1111) + 0b0000_1111;            
+            low_add = (current & 0b0000_1111) + 0b0000_1111;
             result = current.wrapping_sub(0b0000_0001);
             state.set_reg_value(src, result);
         }
         None => {
-            low_add = state.get_mem_value(RPairBitPattern::HL, mem_map) & 0b0000_1111 + 0b0000_1111;            
-            result = state.get_mem_value(RPairBitPattern::HL, mem_map).wrapping_sub(0b0000_0001);
+            low_add = state.get_mem_value(RPairBitPattern::HL, mem_map) & 0b0000_1111 + 0b0000_1111;
+            result = state
+                .get_mem_value(RPairBitPattern::HL, mem_map)
+                .wrapping_sub(0b0000_0001);
             state.set_mem_value(RPairBitPattern::HL, mem_map, result);
         }
     }
@@ -2116,14 +2114,14 @@ fn opcode_dad(state: &mut ProcessorState, mem_map: &mut MemMap) {
     let rp_value = state.get_rp(src);
     let hl_value = state.get_rp(RPairBitPattern::HL);
     let (sum, overflow) = hl_value.overflowing_add(rp_value);
-    state.reg_h = (0xFF00 & sum >> 8) as u8;
+    state.reg_h = ((0xFF00 & sum) >> 8) as u8;
     state.reg_l = (0x00FF & sum) as u8;
 
     // Set/reset CY flag only.
     if overflow {
         state.flags |= ConditionFlags::CY;
     } else {
-        state.flags ^= ConditionFlags::CY;
+        state.flags &= !ConditionFlags::CY;
     }
 }
 
@@ -2134,18 +2132,40 @@ fn opcode_dad(state: &mut ProcessorState, mem_map: &mut MemMap) {
 /// 1. If the value of the least significant 4 bits of the
 /// accumulator is greater than 9 or if the AC flag
 /// is set, 6 is added to the accumulator.
-/// If the value of the most significant 4 bits of the
+/// 2. If the value of the most significant 4 bits of the
 /// accumulator is now greater than 9, or if the CY
 /// flag is set, 6 is added to the most significant 4
 /// bits of the accumulator.
 /// NOTE: All flags are affected.
 fn opcode_daa(state: &mut ProcessorState, mem_map: &mut MemMap) {
     // 0 | 0 | 1 | 0 | 0 | 1 | 1 | 1
-    if state.reg_a & 0b0000_1111 > 0b1001 || state.flags & ConditionFlags::AC == ConditionFlags::AC {
-        state.reg_a += 0b0110;
+    let low = state.reg_a & 0b0000_1111;
+    let high = state.reg_a & 0b1111_0000 >> 4;
+    let aux_set = state.flags & ConditionFlags::AC == ConditionFlags::AC;
+    let carry_set = state.flags & ConditionFlags::CY == ConditionFlags::CY;
+    let mut correction: u8 = 0;
+
+    if low > 0b1001 || aux_set {
+        correction += 0b0110;
+        if low + correction > 0b1111 {
+            state.flags |= ConditionFlags::AC;
+        }
     }
-    if state.reg_a & 0b1111_0000 >> 4 > 9 || state.flags & ConditionFlags::AC == ConditionFlags::AC {
-        state.reg_a += 0b0110 << 4;
+    if carry_set || high > 0b1001 || (high == 0b1001 && low > 0b1001) {
+        correction += 0b0110;
+        state.flags |= ConditionFlags::CY;
+    }
+    state.reg_a = state.reg_a.wrapping_add(correction);
+
+    // Set remaining flags
+    if state.reg_a == 0 {
+        state.flags |= ConditionFlags::Z;
+    }
+    if (state.reg_a & 0b1000_0000) >> 7 == 1 {
+        state.flags |= ConditionFlags::S;
+    }
+    if state.reg_a.count_ones() % 2 == 0 {
+        state.flags |= ConditionFlags::P;
     }
 }
 
@@ -3140,7 +3160,10 @@ pub mod tests {
         machine_state.processor_state.reg_b = 0b1111_1111;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_b, 0b0000_0000);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::Z | ConditionFlags::P | ConditionFlags::AC)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::Z | ConditionFlags::P | ConditionFlags::AC
+        )
     }
 
     #[wasm_bindgen_test]
@@ -3152,7 +3175,10 @@ pub mod tests {
         machine_state.processor_state.reg_c = 0b0111_1111;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_c, 0b1000_0000);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::S | ConditionFlags::AC)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::S | ConditionFlags::AC
+        )
     }
 
     #[wasm_bindgen_test]
@@ -3188,7 +3214,10 @@ pub mod tests {
         machine_state.processor_state.reg_h = 0b1000_0001;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_h, 0b1000_0010);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::P | ConditionFlags::S)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::P | ConditionFlags::S
+        )
     }
 
     #[wasm_bindgen_test]
@@ -3230,7 +3259,10 @@ pub mod tests {
         machine_state.processor_state.reg_a = 0b0000_0100;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b0000_0011);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::P | ConditionFlags::AC)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::P | ConditionFlags::AC
+        )
     }
 
     #[wasm_bindgen_test]
@@ -3242,7 +3274,10 @@ pub mod tests {
         machine_state.processor_state.reg_b = 0b1111_1111;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_b, 0b1111_1110);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::AC | ConditionFlags::S)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::AC | ConditionFlags::S
+        )
     }
 
     #[wasm_bindgen_test]
@@ -3254,7 +3289,10 @@ pub mod tests {
         machine_state.processor_state.reg_c = 0b0111_1111;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_c, 0b0111_1110);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::AC | ConditionFlags::P)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::AC | ConditionFlags::P
+        )
     }
 
     #[wasm_bindgen_test]
@@ -3290,7 +3328,10 @@ pub mod tests {
         machine_state.processor_state.reg_h = 0b1000_0001;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_h, 0b1000_0000);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::S | ConditionFlags::AC)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::S | ConditionFlags::AC
+        )
     }
 
     #[wasm_bindgen_test]
@@ -3302,7 +3343,10 @@ pub mod tests {
         machine_state.processor_state.reg_l = 0b0000_0001;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_l, 0b0000_0000);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::Z | ConditionFlags::P | ConditionFlags::AC)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::Z | ConditionFlags::P | ConditionFlags::AC
+        )
     }
 
     #[wasm_bindgen_test]
@@ -3320,7 +3364,10 @@ pub mod tests {
         machine_state.mem_map[address.into()] = 0b0000_0000;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.mem_map[address.into()], 0b1111_1111);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::P | ConditionFlags::S)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::P | ConditionFlags::S
+        )
     }
 
     #[wasm_bindgen_test]
@@ -3329,7 +3376,9 @@ pub mod tests {
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
         test_rom[0] = 0b00_00_1011 | (RPairBitPattern::BC as u8) << 4;
         machine_state.mem_map.rom = test_rom;
-        machine_state.processor_state.set_rp(0xFF00, RPairBitPattern::BC);
+        machine_state
+            .processor_state
+            .set_rp(0xFF00, RPairBitPattern::BC);
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_b, 0b1111_1110);
         assert_eq!(machine_state.processor_state.reg_c, 0b1111_1111);
@@ -3341,7 +3390,9 @@ pub mod tests {
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
         test_rom[0] = 0b00_00_1011 | (RPairBitPattern::DE as u8) << 4;
         machine_state.mem_map.rom = test_rom;
-        machine_state.processor_state.set_rp(0x0000, RPairBitPattern::DE);
+        machine_state
+            .processor_state
+            .set_rp(0x0000, RPairBitPattern::DE);
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_d, 0b1111_1111);
         assert_eq!(machine_state.processor_state.reg_e, 0b1111_1111);
@@ -3353,7 +3404,9 @@ pub mod tests {
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
         test_rom[0] = 0b00_00_1011 | (RPairBitPattern::HL as u8) << 4;
         machine_state.mem_map.rom = test_rom;
-        machine_state.processor_state.set_rp(0xFFFF, RPairBitPattern::HL);
+        machine_state
+            .processor_state
+            .set_rp(0xFFFF, RPairBitPattern::HL);
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_h, 0b1111_1111);
         assert_eq!(machine_state.processor_state.reg_l, 0b1111_1110);
@@ -3365,9 +3418,104 @@ pub mod tests {
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
         test_rom[0] = 0b00_00_1011 | (RPairBitPattern::SP as u8) << 4;
         machine_state.mem_map.rom = test_rom;
-        machine_state.processor_state.set_rp(0x0FF0, RPairBitPattern::SP);
+        machine_state
+            .processor_state
+            .set_rp(0x0FF0, RPairBitPattern::SP);
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.stack_pointer, 0x0FEF);
+    }
+
+    #[wasm_bindgen_test]
+    fn dad_bc() {
+        let mut machine_state = MachineState::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b00_00_1001 | (RPairBitPattern::BC as u8) << 4;
+        machine_state.mem_map.rom = test_rom;
+        machine_state
+            .processor_state
+            .set_rp(0x0000, RPairBitPattern::BC);
+        machine_state
+            .processor_state
+            .set_rp(0x0000, RPairBitPattern::HL);
+        machine_state.iterate_processor_state();
+        assert_eq!(
+            machine_state.processor_state.get_rp(RPairBitPattern::HL),
+            0x0000
+        );
+        assert_eq!(machine_state.processor_state.flags.bits, 0b0000_0000)
+    }
+
+    #[wasm_bindgen_test]
+    fn dad_de() {
+        let mut machine_state = MachineState::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b00_00_1001 | (RPairBitPattern::DE as u8) << 4;
+        machine_state.mem_map.rom = test_rom;
+        machine_state
+            .processor_state
+            .set_rp(0x0000, RPairBitPattern::DE);
+        machine_state
+            .processor_state
+            .set_rp(0xFFFF, RPairBitPattern::HL);
+        machine_state.iterate_processor_state();
+        assert_eq!(
+            machine_state.processor_state.get_rp(RPairBitPattern::HL),
+            0xFFFF
+        );
+        assert_eq!(machine_state.processor_state.flags.bits, 0b0000_0000)
+    }
+
+    #[wasm_bindgen_test]
+    fn dad_hl() {
+        let mut machine_state = MachineState::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b00_00_1001 | (RPairBitPattern::HL as u8) << 4;
+        machine_state.mem_map.rom = test_rom;
+        machine_state
+            .processor_state
+            .set_rp(0xFFFF, RPairBitPattern::HL);
+        machine_state.iterate_processor_state();
+        assert_eq!(
+            machine_state.processor_state.get_rp(RPairBitPattern::HL),
+            0xFFFE
+        );
+        assert_eq!(machine_state.processor_state.flags, ConditionFlags::CY)
+    }
+
+    #[wasm_bindgen_test]
+    fn dad_sp() {
+        let mut machine_state = MachineState::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b00_00_1001 | (RPairBitPattern::SP as u8) << 4;
+        machine_state.mem_map.rom = test_rom;
+        machine_state
+            .processor_state
+            .set_rp(0xFFFF, RPairBitPattern::SP);
+        machine_state
+            .processor_state
+            .set_rp(0x0001, RPairBitPattern::HL);
+        machine_state.iterate_processor_state();
+        assert_eq!(
+            machine_state.processor_state.get_rp(RPairBitPattern::HL),
+            0x0000
+        );
+        assert_eq!(machine_state.processor_state.flags, ConditionFlags::CY)
+    }
+
+    #[wasm_bindgen_test]
+    fn daa() {
+        let mut machine_state = MachineState::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b00_100_111;
+        machine_state.mem_map.rom = test_rom;
+        machine_state.processor_state.reg_a = 0b0001_0001;
+        machine_state.processor_state.flags = ConditionFlags::AC;
+        machine_state.iterate_processor_state();
+        assert_eq!(machine_state.processor_state.reg_a, 0b0001_0111);
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::P | ConditionFlags::AC
+        )
     }
 
     #[wasm_bindgen_test]
@@ -3390,6 +3538,7 @@ pub mod tests {
             orig_stack_add - 2
         )
     }
+
     #[wasm_bindgen_test]
     fn call_nz() {
         let mut machine_state = MachineState::new();
