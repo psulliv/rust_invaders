@@ -1,10 +1,119 @@
-#[allow(unused)]
-use web_sys::console;
+#![allow(unused)]
+use crate::eighty_eighty_emulator::ConditionFlags;
+use lazy_static::lazy_static;
+use regex::Regex;
+use std::io;
+use std::io::prelude::*;
 
-pub fn debug_print_op_code(opcode: u8) -> String {
+use crate::{eighty_eighty_emulator::ProcessorState, machine::MachineState};
+#[allow(unused)]
+
+pub fn pause() {
+    let mut stdin = io::stdin();
+    let _ = stdin.read(&mut [0u8]).unwrap();
+}
+
+pub fn debug_console_print(print_this: &String) {
+    if cfg!(target_arch = "wasm32") {
+        web_sys::console::log_1(&print_this.into());
+    }
+    if cfg!(target_arch = "x86_64") {
+        println!("{}", &print_this);
+    }
+}
+
+pub fn opcode_printer(state: &MachineState) {
+    // 1a35 INX    D   .sp..  A $00 B $af C $00 D $1b E $52 H $20 L $52 SP 23fe
+    // print the address in hex, print the instruction and source/dest, flags, registers
+    // A B C D E H L SP
+
+    let (opcode_mnem, opcode_len, _) =
+        debug_print_op_code(state.mem_map[state.processor_state.prog_counter]);
+    let opcode_message = match opcode_len {
+        1 => format!("{} ", opcode_mnem),
+        2 => format!(
+            "{} {:#04x} ",
+            opcode_mnem,
+            state.mem_map[state.processor_state.prog_counter + 1],
+        ),
+        3 => format!(
+            "{} {:#04x} {:#04x} ",
+            opcode_mnem,
+            state.mem_map[state.processor_state.prog_counter + 1],
+            state.mem_map[state.processor_state.prog_counter + 2],
+        ),
+        _ => panic!(),
+    };
+
+    // mnemonic, length, message
+    let (opcode_mnem, _, _) =
+        debug_print_op_code(state.mem_map[state.processor_state.prog_counter]);
+    print!(
+        "{:04x} {} ",
+        state.processor_state.prog_counter, opcode_mnem,
+    )
+}
+
+pub fn processor_state_printer(state: &MachineState) {
+    print!(
+        "{}",
+        if state.processor_state.flags.contains(ConditionFlags::Z) {
+            "z"
+        } else {
+            "."
+        }
+    );
+    print!(
+        "{}",
+        if state.processor_state.flags.contains(ConditionFlags::S) {
+            "s"
+        } else {
+            "."
+        }
+    );
+    print!(
+        "{}",
+        if state.processor_state.flags.contains(ConditionFlags::P) {
+            "p"
+        } else {
+            "."
+        }
+    );
+    print!(
+        "{}",
+        if state.processor_state.flags.contains(ConditionFlags::CY) {
+            "c"
+        } else {
+            "."
+        }
+    );
+    print!(
+        "{}",
+        if state.processor_state.flags.contains(ConditionFlags::AC) {
+            "a"
+        } else {
+            "."
+        }
+    );
+
+    print!(
+        " A ${:02x} B ${:02x} C ${:02x} D ${:02x} E ${:02x} H ${:02x} L ${:02x} SP {:04x}",
+        state.processor_state.reg_a,
+        state.processor_state.reg_b,
+        state.processor_state.reg_c,
+        state.processor_state.reg_d,
+        state.processor_state.reg_e,
+        state.processor_state.reg_h,
+        state.processor_state.reg_l,
+        state.processor_state.stack_pointer,
+    );
+}
+
+pub fn debug_print_op_code(opcode: u8) -> (String, u8, String) {
     //! Print out the current opcode and return the number of bytes it uses including itself
     //! Parsed off of http://www.emulator101.com/reference/8080-by-opcode.html
-    match opcode {
+    //! Todo: This needs to be parsing out the first white space surrounded integer as the num bytes
+    let opcode_message = match opcode {
         0x00 => " 	NOP	1		".to_string(),
         0x01 => " 	LXI B,D16	3		B <- byte 3, C <- byte 2".to_string(),
         0x02 => " 	STAX B	1		(BC) <- A".to_string(),
@@ -261,5 +370,26 @@ pub fn debug_print_op_code(opcode: u8) -> String {
         0xfd => " 	-			".to_string(),
         0xfe => " 	CPI D8	2	Z, S, P, CY, AC	A - data".to_string(),
         0xff => " 	RST 7	1		CALL $38".to_string(),
+    };
+    lazy_static! {
+        static ref RE: Regex =
+            Regex::new(r"^.*\t(?P<opcode_mnem>\S*).*\t(?P<num_bytes>[123])").unwrap();
+    }
+    if let Some(opcode_parsed) = RE.captures_iter(&opcode_message).next() {
+        let num_bytes = opcode_parsed
+            .name("num_bytes")
+            .unwrap()
+            .as_str()
+            .to_string()
+            .parse()
+            .unwrap();
+        let opcode_mnem = opcode_parsed
+            .name("opcode_mnem")
+            .unwrap()
+            .as_str()
+            .to_string();
+        (opcode_mnem, num_bytes, opcode_message)
+    } else {
+        ("Not an instruction".to_string(), 1, opcode_message)
     }
 }

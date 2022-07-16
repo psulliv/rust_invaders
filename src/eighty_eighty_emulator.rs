@@ -12,12 +12,11 @@ use std::{
     fmt::Debug,
     ops::{Index, IndexMut},
 };
-use web_sys::console;
 
-use crate::{debug_utils::debug_print_op_code, space_invaders_rom};
+use crate::space_invaders_rom;
 
 bitflags! {
-    struct ConditionFlags: u8 {
+    pub struct ConditionFlags: u8 {
     const CY = 0b0000_0001;
     const P =  0b0000_0100;
     const AC = 0b0001_0000;
@@ -38,23 +37,23 @@ impl ConditionFlags {
         }
         if result.count_ones() % 2 == 0 {
             self.insert(ConditionFlags::P);
-        }  
+        }
     }
 }
 
 #[derive(PartialEq, Debug)]
 pub struct ProcessorState {
-    reg_a: u8,
-    reg_b: u8,
-    reg_c: u8,
-    reg_d: u8,
-    reg_e: u8,
-    reg_h: u8,
-    reg_l: u8,
-    stack_pointer: u16,
-    prog_counter: u16,
-    flags: ConditionFlags,
-    interrupts_enabled: bool,
+    pub reg_a: u8,
+    pub reg_b: u8,
+    pub reg_c: u8,
+    pub reg_d: u8,
+    pub reg_e: u8,
+    pub reg_h: u8,
+    pub reg_l: u8,
+    pub stack_pointer: u16,
+    pub prog_counter: u16,
+    pub flags: ConditionFlags,
+    pub interrupts_enabled: bool,
 }
 
 impl ProcessorState {
@@ -67,7 +66,7 @@ impl ProcessorState {
             reg_e: 0,
             reg_h: 0,
             reg_l: 0,
-            stack_pointer: 0x2400,
+            stack_pointer: 0,
             prog_counter: 0,
             flags: ConditionFlags {
                 bits: (0b0000_0000),
@@ -239,7 +238,7 @@ impl MemMap {
     pub fn new() -> Self {
         MemMap {
             rom: space_invaders_rom::SPACE_INVADERS_ROM,
-            rw_mem: vec![0; 4096],
+            rw_mem: vec![0; 8192],
         }
     }
 }
@@ -384,7 +383,7 @@ impl MachineState {
         let state = &mut self.processor_state;
         let ports = self.port_state.clone();
         let cur_instruction = mem_map[state.prog_counter];
-        console::log_1(&debug_print_op_code(cur_instruction).into());
+
         match cur_instruction {
             0x00 => {
                 opcode_nop(state);
@@ -1242,7 +1241,6 @@ impl MachineState {
                 opcode_rst(state, mem_map);
             }
         };
-        println!("{:?}", state);
     }
 }
 
@@ -1268,7 +1266,7 @@ fn opcode_call(state: &mut ProcessorState, mem_map: &mut MemMap) {
     let condition = get_condition_bit_pattern(cur_instruction);
     let c_type = cur_instruction & 0b00_000_111;
     if c_type == 0b101 || state.check_condition(condition) {
-        state.push_address(mem_map, state.prog_counter);
+        state.push_address(mem_map, state.prog_counter + 3);
         state.prog_counter = two_le_eights_to_one_sixteen(second_byte, third_byte);
     } else {
         state.prog_counter += 3;
@@ -1486,8 +1484,8 @@ fn opcode_mov(state: &mut ProcessorState, mem_map: &mut MemMap) {
     let cur_instruction = mem_map[state.prog_counter];
     let dest = get_destination_register_bit_pattern(cur_instruction);
     let src = get_source_register_bit_pattern(cur_instruction);
-    if dest == RegisterBitPattern::Other {
-        match src {
+    if src == RegisterBitPattern::Other {
+        match dest {
             // A
             RegisterBitPattern::A => {
                 state.reg_a = mem_map[state.get_rp(RPairBitPattern::HL)];
@@ -1520,10 +1518,10 @@ fn opcode_mov(state: &mut ProcessorState, mem_map: &mut MemMap) {
                 panic!("Requested impossible mov operation, mem to mem");
             }
         }
-    } else if src == RegisterBitPattern::Other {
+    } else if dest == RegisterBitPattern::Other {
         // then this is a 0 | 1 | D | D | D | 1 | 1 | 0
         // format opcode, use dest
-        match dest {
+        match src {
             // A
             RegisterBitPattern::A => {
                 mem_map[state.get_rp(RPairBitPattern::HL)] = state.reg_a;
@@ -2211,10 +2209,10 @@ fn opcode_ori(state: &mut ProcessorState, mem_map: &mut MemMap) {
 
 /// CMP r (Compare Register)
 /// (A) - (r)
-/// The content of register r is subtracted from the 
-/// accumulator. The accumulator remains unchanged. The 
+/// The content of register r is subtracted from the
+/// accumulator. The accumulator remains unchanged. The
 /// condition flags are set as a result of the subtraction.
-/// The Z flag is set to 1 if (A) = (r). The CY flag is 
+/// The Z flag is set to 1 if (A) = (r). The CY flag is
 /// set to 1 if (A) < (r) .
 /// CMP M (Compare memory)
 /// (A) - ((H) (L))
@@ -2243,11 +2241,13 @@ fn opcode_cmp(state: &mut ProcessorState, mem_map: &mut MemMap) {
     let aux_carry = low_add & 0x10 != 0;
 
     let difference = state.reg_a.wrapping_add(twos_complement);
-    
+
     state.flags = ConditionFlags::empty();
-    state.flags.set_zsp(difference);    // To set S & P; Z is overwritten in next line.
+    state.flags.set_zsp(difference); // To set S & P; Z is overwritten in next line.
     state.flags.set(ConditionFlags::Z, difference == 0);
-    state.flags.set(ConditionFlags::CY, state.reg_a < subtrahend);
+    state
+        .flags
+        .set(ConditionFlags::CY, state.reg_a < subtrahend);
     state.flags.set(ConditionFlags::AC, aux_carry);
 }
 
@@ -2269,11 +2269,13 @@ fn opcode_cpi(state: &mut ProcessorState, mem_map: &mut MemMap) {
     let aux_carry = low_add & 0x10 != 0;
 
     let difference = state.reg_a.wrapping_add(twos_complement);
-    
+
     state.flags = ConditionFlags::empty();
-    state.flags.set_zsp(difference);    // To set S & P; Z is overwritten in next line.
+    state.flags.set_zsp(difference); // To set S & P; Z is overwritten in next line.
     state.flags.set(ConditionFlags::Z, difference == 0);
-    state.flags.set(ConditionFlags::CY, state.reg_a < second_byte);
+    state
+        .flags
+        .set(ConditionFlags::CY, state.reg_a < second_byte);
     state.flags.set(ConditionFlags::AC, aux_carry);
 }
 
@@ -2288,7 +2290,9 @@ fn opcode_rlc(state: &mut ProcessorState) {
     // 0 | 0 | 0 | 0 | 0 | 1 | 1 | 1
     state.prog_counter += 1;
     state.reg_a = state.reg_a.rotate_left(1);
-    state.flags.set(ConditionFlags::CY, (state.reg_a & 0x01) == 1);
+    state
+        .flags
+        .set(ConditionFlags::CY, (state.reg_a & 0x01) == 1);
 }
 
 /// RRC (Rotate Right)
@@ -2296,13 +2300,15 @@ fn opcode_rlc(state: &mut ProcessorState) {
 /// (CY) (AO)
 /// The content of the accumulator is rotated right one
 /// position. The high order bit and the CY flag are both
-/// set to the value shifted out of the low order bit 
+/// set to the value shifted out of the low order bit
 /// position. Only the CY flag is affected.
 fn opcode_rrc(state: &mut ProcessorState) {
     // 0 | 0 | 0 | 0 | 1 | 1 | 1 | 1
     state.prog_counter += 1;
     state.reg_a = state.reg_a.rotate_right(1);
-    state.flags.set(ConditionFlags::CY, (state.reg_a & 0x80) == 1);
+    state
+        .flags
+        .set(ConditionFlags::CY, (state.reg_a & 0x80) == 1);
 }
 
 /// RAL (Rotate left through carry)
@@ -2566,6 +2572,7 @@ fn opcode_in(state: &mut ProcessorState, mem_map: &mut MemMap, ports: Arc<Mutex<
             panic!("Unexpected port in opcode_in")
         }
     }
+    state.prog_counter += 2;
 }
 
 /// OUT port (Output)
@@ -2586,10 +2593,17 @@ fn opcode_out(state: &mut ProcessorState, mem_map: &mut MemMap, ports: Arc<Mutex
         0x04 => {
             port_state.write_port_4 = state.reg_a;
         }
+        // Sound port
+        0x03 => {}
+        // Sound port
+        0x05 => {}
+        // Todo: watchdog, do we even care to emulate this?
+        0x06 => {}
         _ => {
             panic!("Unexpected port in opcode_out")
         }
     }
+    state.prog_counter += 2;
 }
 
 /// EI (Enable interrupts)
@@ -2600,6 +2614,7 @@ fn opcode_ei(state: &mut ProcessorState, _mem_map: &mut MemMap) {
     // about the interrupt timer only being enabled after the next
     // instruction and neither will we.
     state.interrupts_enabled = true;
+    state.prog_counter += 1;
 }
 
 /// 01 (Disable interrupts)
@@ -2607,6 +2622,7 @@ fn opcode_ei(state: &mut ProcessorState, _mem_map: &mut MemMap) {
 /// lowing the execution of the 01 instruction.
 fn opcode_di(state: &mut ProcessorState, _mem_map: &mut MemMap) {
     state.interrupts_enabled = false;
+    state.prog_counter += 1;
 }
 
 /// HLT (Halt)
@@ -2615,6 +2631,10 @@ fn opcode_di(state: &mut ProcessorState, _mem_map: &mut MemMap) {
 fn opcode_halt(_state: &mut ProcessorState, _mem_map: &mut MemMap) {
     std::process::exit(0);
 }
+
+// Todo: See if we can convert the Arc::Mutex to an Rc::RefCell
+
+// Todo: do something about the write port 6 watchdog
 
 // Todo: swap out register pair register condition flag and other bit twiddling
 // and masking with functions.
@@ -2649,18 +2669,14 @@ fn opcode_halt(_state: &mut ProcessorState, _mem_map: &mut MemMap) {
 // able to be handled though since there aren't external deps, disk usage, network
 // usage, additional threads to contend, or even memory usage outside the initial allocations.
 
-// somehow integrate memory layout and configuration into the processor state, maybe add
-// them under an overarching machine state? Maybe just integrate the `emulate_loop`
-// `iterate_state` and whatnot with a struct and method but leave the underlying impl
-// imperativeish?
-
 #[cfg(test)]
 pub mod tests {
     use super::*;
     use crate::space_invaders_rom;
     use wasm_bindgen_test::*;
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn basic_nop_step() {
         let mut machine_state = MachineState::new();
         let cur_instruction_address = machine_state.processor_state.prog_counter;
@@ -2673,7 +2689,8 @@ pub mod tests {
         );
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn basic_jmp_step() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -2686,7 +2703,8 @@ pub mod tests {
         assert_eq!(test_address, machine_state.processor_state.prog_counter);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn jnz_step() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -2721,7 +2739,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.prog_counter, test_address);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn jz_step() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -2756,7 +2775,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.prog_counter, test_address);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn lxi_step_bc() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -2770,7 +2790,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.reg_c, test_rom[1]);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn lxi_step_de() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -2783,7 +2804,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.reg_d, test_rom[2]);
         assert_eq!(machine_state.processor_state.reg_e, test_rom[1]);
     }
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn lxi_step_hl() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -2797,7 +2819,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.reg_l, test_rom[1]);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn lxi_step_sp() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -2813,7 +2836,8 @@ pub mod tests {
         );
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn lxi_step_good_pc() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -2826,7 +2850,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.prog_counter, 3);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn mvi_step_reg_a() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -2838,7 +2863,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.reg_a, 0xff);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn mvi_step_reg_b() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -2850,7 +2876,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.reg_b, 0xff);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn mvi_step_reg_c() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -2862,7 +2889,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.reg_c, 0xff);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn mvi_step_reg_d() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -2874,7 +2902,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.reg_d, 0xff);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn mvi_step_reg_e() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -2886,7 +2915,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.reg_e, 0xff);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn mvi_step_reg_h() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -2898,7 +2928,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.reg_h, 0xff);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn mvi_step_reg_l() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -2910,7 +2941,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.reg_l, 0xff);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn mvi_step_mem() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -2929,7 +2961,8 @@ pub mod tests {
         );
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn mvi_step_good_pc() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -2945,7 +2978,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.prog_counter, 2);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn add_step_reg_a() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -2960,7 +2994,8 @@ pub mod tests {
         )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn add_step_reg_b() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -2977,7 +3012,8 @@ pub mod tests {
         )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn add_step_reg_c() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -2994,7 +3030,8 @@ pub mod tests {
         )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn add_step_reg_d() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3011,7 +3048,8 @@ pub mod tests {
         )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn add_step_reg_e() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3028,7 +3066,8 @@ pub mod tests {
         )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn add_step_reg_h() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3045,7 +3084,8 @@ pub mod tests {
         )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn add_step_reg_l() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3062,7 +3102,8 @@ pub mod tests {
         )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn add_step_mem() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3081,7 +3122,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.flags, ConditionFlags::P)
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn adi_step() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3094,7 +3136,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.flags, ConditionFlags::AC)
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn adc_step_reg_a() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3107,7 +3150,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.flags, ConditionFlags::P)
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn adc_step_reg_b() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3124,7 +3168,8 @@ pub mod tests {
         )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn adc_step_reg_c() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3141,7 +3186,8 @@ pub mod tests {
         )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn adc_step_reg_d() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3158,7 +3204,8 @@ pub mod tests {
         )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn adc_step_reg_e() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3175,7 +3222,8 @@ pub mod tests {
         )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn adc_step_reg_h() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3192,7 +3240,8 @@ pub mod tests {
         )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn adc_step_reg_l() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3206,7 +3255,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.flags, ConditionFlags::P)
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn adc_step_mem() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3226,7 +3276,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.flags, ConditionFlags::P)
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn aci() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3243,7 +3294,8 @@ pub mod tests {
         )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn sub_step_reg_a() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3258,7 +3310,8 @@ pub mod tests {
         )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn sub_step_reg_b() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3274,7 +3327,8 @@ pub mod tests {
         )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn sub_step_reg_c() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3290,7 +3344,8 @@ pub mod tests {
         )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn sub_step_reg_d() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3303,7 +3358,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.flags, ConditionFlags::CY)
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn sub_step_reg_e() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3319,7 +3375,8 @@ pub mod tests {
         )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn sub_step_reg_h() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3335,7 +3392,8 @@ pub mod tests {
         )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn sub_step_reg_l() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3351,7 +3409,8 @@ pub mod tests {
         )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn sub_step_mem() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3370,7 +3429,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.flags.bits, 0b0000_0000);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn sbb_step_reg_c() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3384,7 +3444,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.flags, ConditionFlags::AC)
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn sui() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3397,7 +3458,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.flags, ConditionFlags::AC)
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn sbi() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3411,7 +3473,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.flags, ConditionFlags::AC)
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn inr_reg_a() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3423,7 +3486,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.flags, ConditionFlags::P)
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn inr_reg_b() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3438,7 +3502,8 @@ pub mod tests {
         )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn inr_reg_c() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3453,7 +3518,8 @@ pub mod tests {
         )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn inr_reg_d() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3465,7 +3531,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.flags, ConditionFlags::P)
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn inr_reg_e() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3477,7 +3544,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.flags, ConditionFlags::AC)
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn inr_reg_h() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3492,7 +3560,8 @@ pub mod tests {
         )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn inr_reg_l() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3504,7 +3573,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.flags, ConditionFlags::S)
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn inr_mem() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3522,7 +3592,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.flags.bits, 0b0000_0000)
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn dcr_reg_a() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3537,7 +3608,8 @@ pub mod tests {
         )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn dcr_reg_b() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3552,7 +3624,8 @@ pub mod tests {
         )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn dcr_reg_c() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3567,7 +3640,8 @@ pub mod tests {
         )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn dcr_reg_d() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3579,7 +3653,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.flags, ConditionFlags::P)
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn dcr_reg_e() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3591,7 +3666,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.flags, ConditionFlags::AC)
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn dcr_reg_h() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3606,7 +3682,8 @@ pub mod tests {
         )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn dcr_reg_l() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3621,7 +3698,8 @@ pub mod tests {
         )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn dcr_mem() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3642,7 +3720,8 @@ pub mod tests {
         )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn dcx_bc() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3656,7 +3735,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.reg_c, 0b1111_1111);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn dcx_de() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3670,7 +3750,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.reg_e, 0b1111_1111);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn dcx_hl() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3684,7 +3765,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.reg_l, 0b1111_1110);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn dcx_sp() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3697,7 +3779,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.stack_pointer, 0x0FEF);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn dad_bc() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3717,7 +3800,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.flags.bits, 0b0000_0000)
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn dad_de() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3737,7 +3821,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.flags.bits, 0b0000_0000)
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn dad_hl() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3754,7 +3839,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.flags, ConditionFlags::CY)
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn dad_sp() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3774,7 +3860,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.flags, ConditionFlags::CY)
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn daa() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3790,7 +3877,8 @@ pub mod tests {
         )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn ana_reg_a() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3800,10 +3888,14 @@ pub mod tests {
         machine_state.processor_state.flags = ConditionFlags::CY | ConditionFlags::AC;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b0000_0000);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::Z | ConditionFlags::P)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::Z | ConditionFlags::P
+        )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn ana_other_reg() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3817,7 +3909,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.flags, ConditionFlags::P)
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn ana_mem() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3834,10 +3927,14 @@ pub mod tests {
         machine_state.processor_state.flags = ConditionFlags::CY;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0xff);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::P | ConditionFlags::S)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::P | ConditionFlags::S
+        )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn ani() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3851,7 +3948,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.flags.bits, 0b0000_0000)
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn xra_reg_a() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3861,10 +3959,14 @@ pub mod tests {
         machine_state.processor_state.flags = ConditionFlags::CY | ConditionFlags::AC;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b0000_0000);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::Z | ConditionFlags::P)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::Z | ConditionFlags::P
+        )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn xra_other_reg() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3875,10 +3977,14 @@ pub mod tests {
         machine_state.processor_state.flags = ConditionFlags::CY;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b1111_0011);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::P | ConditionFlags::S)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::P | ConditionFlags::S
+        )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn xra_mem() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3895,10 +4001,14 @@ pub mod tests {
         machine_state.processor_state.flags = ConditionFlags::CY;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0x00);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::P | ConditionFlags::Z)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::P | ConditionFlags::Z
+        )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn xri() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3912,7 +4022,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.flags.bits, 0b0000_0000)
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn ora_reg_a() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3922,10 +4033,14 @@ pub mod tests {
         machine_state.processor_state.flags = ConditionFlags::CY | ConditionFlags::AC;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b0000_0000);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::Z | ConditionFlags::P)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::Z | ConditionFlags::P
+        )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn ora_other_reg() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3936,10 +4051,14 @@ pub mod tests {
         machine_state.processor_state.flags = ConditionFlags::CY;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b1111_1111);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::P | ConditionFlags::S)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::P | ConditionFlags::S
+        )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn ora_mem() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3956,10 +4075,14 @@ pub mod tests {
         machine_state.processor_state.flags = ConditionFlags::CY;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0xff);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::P | ConditionFlags::S)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::P | ConditionFlags::S
+        )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn ori() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3973,7 +4096,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.flags, ConditionFlags::P)
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn cmp_reg_a() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3982,10 +4106,14 @@ pub mod tests {
         machine_state.processor_state.reg_a = 0b0000_1111;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b0000_1111);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::Z | ConditionFlags::P | ConditionFlags::AC)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::Z | ConditionFlags::P | ConditionFlags::AC
+        )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn cmp_other_reg() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -3996,10 +4124,14 @@ pub mod tests {
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b0000_1111);
         assert_eq!(machine_state.processor_state.reg_d, 0b1111_1111);
-        assert_eq!(machine_state.processor_state.flags, ConditionFlags::AC | ConditionFlags::CY)
+        assert_eq!(
+            machine_state.processor_state.flags,
+            ConditionFlags::AC | ConditionFlags::CY
+        )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn cmp_mem() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -4015,11 +4147,12 @@ pub mod tests {
         machine_state.processor_state.reg_a = 0b1000_0001;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b1000_0001);
-        assert_eq!(machine_state.mem_map[address.into()], 0b1000_0000);        
+        assert_eq!(machine_state.mem_map[address.into()], 0b1000_0000);
         assert_eq!(machine_state.processor_state.flags.bits, 0b0000_0000)
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn cpi() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -4033,7 +4166,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.flags, ConditionFlags::AC)
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn rlc() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -4045,7 +4179,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.flags, ConditionFlags::CY)
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn rrc() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -4057,7 +4192,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.flags, ConditionFlags::empty())
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn ral() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -4070,7 +4206,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.flags, ConditionFlags::CY)
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn rar() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -4083,7 +4220,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.flags, ConditionFlags::empty())
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn cma() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -4094,7 +4232,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.reg_a, 0b0000_1111);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn cmc() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -4105,7 +4244,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.flags, ConditionFlags::empty());
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn stc() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -4113,12 +4253,14 @@ pub mod tests {
         machine_state.mem_map.rom = test_rom;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.flags, ConditionFlags::CY);
-    }    
+    }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn call_uncon() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        machine_state.processor_state.stack_pointer = 0x2400;
         let orig_stack_add = machine_state.processor_state.stack_pointer;
         // 0b1100_1101 is unconditional call
         test_rom[0] = 0b1100_1101;
@@ -4136,10 +4278,12 @@ pub mod tests {
         )
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn call_nz() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        machine_state.processor_state.stack_pointer = 0x2400;
         let orig_stack_add = machine_state.processor_state.stack_pointer;
         // 0b11_000_100 is cnz
         test_rom[0] = 0b11_000_100;
@@ -4174,10 +4318,12 @@ pub mod tests {
         );
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn call_z() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        machine_state.processor_state.stack_pointer = 0x2400;
         let orig_stack_add = machine_state.processor_state.stack_pointer;
         // 0b11_001_100 is cz
         test_rom[0] = 0b11_001_100;
@@ -4212,10 +4358,12 @@ pub mod tests {
         );
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn call_nc() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        machine_state.processor_state.stack_pointer = 0x2400;
         let orig_stack_add = machine_state.processor_state.stack_pointer;
         // 0b11_010_100 is cnc
         test_rom[0] = 0b11_010_100;
@@ -4250,13 +4398,16 @@ pub mod tests {
         );
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn call_c() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        machine_state.processor_state.stack_pointer = 0x2400;
         let orig_stack_add = machine_state.processor_state.stack_pointer;
         // 0b11_011_100 is cc
         test_rom[0] = 0b11_011_100;
+        machine_state.processor_state.stack_pointer = 0x2400;
         let some_rando_address = 0x0020;
         let second_byte = (some_rando_address & 0x00ff) as u8;
         let third_byte = ((some_rando_address & 0xff00) >> 8) as u8;
@@ -4287,10 +4438,12 @@ pub mod tests {
             orig_stack_add - 2
         );
     }
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn call_po() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        machine_state.processor_state.stack_pointer = 0x2400;
         let orig_stack_add = machine_state.processor_state.stack_pointer;
         // 0b11_100_100 is cpo
         test_rom[0] = 0b11_100_100;
@@ -4324,10 +4477,12 @@ pub mod tests {
             orig_stack_add - 2
         );
     }
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn call_pe() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        machine_state.processor_state.stack_pointer = 0x2400;
         let orig_stack_add = machine_state.processor_state.stack_pointer;
         // 0b11_101_100 is cpo
         test_rom[0] = 0b11_101_100;
@@ -4361,10 +4516,12 @@ pub mod tests {
             orig_stack_add - 2
         );
     }
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn call_p() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        machine_state.processor_state.stack_pointer = 0x2400;
         let orig_stack_add = machine_state.processor_state.stack_pointer;
         // 0b11_110_100 is cp
         test_rom[0] = 0b11_110_100;
@@ -4398,10 +4555,12 @@ pub mod tests {
             orig_stack_add - 2
         );
     }
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn call_m() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        machine_state.processor_state.stack_pointer = 0x2400;
         let orig_stack_add = machine_state.processor_state.stack_pointer;
         // 0b11_111_100 is cp
         test_rom[0] = 0b11_111_100;
@@ -4436,7 +4595,8 @@ pub mod tests {
         );
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn ldax_bc() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -4451,7 +4611,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.reg_a, 0xff);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn ldax_de() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -4466,7 +4627,8 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.reg_a, 0xff);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn verify_getset_rp_bc() {
         let mut machine_state = MachineState::new();
         let some_address: u16 = 0xfffe;
@@ -4479,7 +4641,8 @@ pub mod tests {
         );
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn verify_getset_rp_de() {
         let mut machine_state = MachineState::new();
         let some_address: u16 = 0xfffe;
@@ -4492,7 +4655,8 @@ pub mod tests {
         );
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn verify_getset_rp_hl() {
         let mut machine_state = MachineState::new();
         let some_address: u16 = 0xfffe;
@@ -4505,7 +4669,8 @@ pub mod tests {
         );
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn verify_getset_rp_sp() {
         let mut machine_state = MachineState::new();
         let some_address: u16 = 0xfffe;
@@ -4518,9 +4683,11 @@ pub mod tests {
         );
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn verify_push() {
         let mut machine_state = MachineState::new();
+        machine_state.processor_state.stack_pointer = 0x2400;
         machine_state
             .processor_state
             .push_address(&mut machine_state.mem_map, 0xfffe);
@@ -4530,9 +4697,11 @@ pub mod tests {
         assert_eq!(0xfffe, address_in_stack);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn verify_pop() {
         let mut machine_state = MachineState::new();
+        machine_state.processor_state.stack_pointer = 0x2400;
         machine_state
             .processor_state
             .push_address(&mut machine_state.mem_map, 0xfffe);
@@ -4544,7 +4713,8 @@ pub mod tests {
         );
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn mov_a_mem() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -4562,22 +4732,24 @@ pub mod tests {
         );
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn mov_mem_a() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
-        // register pair d-e is 01
+
         test_rom[0] = 0b01_110_111;
         let some_rando_address = 0x0020;
-        test_rom[some_rando_address] = 0xff;
+        machine_state.processor_state.reg_a = 0xff;
         machine_state.processor_state.reg_h = (some_rando_address >> 8) as u8;
         machine_state.processor_state.reg_l = some_rando_address as u8;
         machine_state.mem_map.rom = test_rom;
         machine_state.iterate_processor_state();
-        assert_eq!(machine_state.processor_state.reg_a, 0xff);
+        assert_eq!(machine_state.mem_map[some_rando_address], 0xff);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn mov_a_b() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -4589,10 +4761,12 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.reg_a, 0xff);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn ret_uncon() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        machine_state.processor_state.stack_pointer = 0x2400;
         let original_stack_pointer = machine_state.processor_state.stack_pointer;
         test_rom[0] = 0b11_001_001;
         machine_state.mem_map.rom = test_rom;
@@ -4612,11 +4786,12 @@ pub mod tests {
         );
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn rz() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
-
+        machine_state.processor_state.stack_pointer = 0x2400;
         test_rom[0] = 0b11_001_000;
         machine_state.mem_map.rom = test_rom;
         machine_state
@@ -4637,10 +4812,12 @@ pub mod tests {
         assert_eq!(0x0020, machine_state.processor_state.prog_counter);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn rst() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        machine_state.processor_state.stack_pointer = 0x2400;
 
         // RST to location 001, address 1000;
         test_rom[0] = 0b11_001_111;
@@ -4650,7 +4827,8 @@ pub mod tests {
         assert_eq!(0b1000, machine_state.processor_state.prog_counter);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn pchl() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -4666,9 +4844,11 @@ pub mod tests {
         assert_eq!(0x0020, machine_state.processor_state.prog_counter);
         assert_ne!(machine_state.processor_state.prog_counter, 0);
     }
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn push_byte() {
         let mut machine_state = MachineState::new();
+        machine_state.processor_state.stack_pointer = 0x2400;
         machine_state
             .processor_state
             .flags
@@ -4697,7 +4877,8 @@ pub mod tests {
         );
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn pop_byte() {
         let mut machine_state = MachineState::new();
         machine_state
@@ -4708,6 +4889,7 @@ pub mod tests {
             .processor_state
             .flags
             .set(ConditionFlags::CY, true);
+        machine_state.processor_state.stack_pointer = 0x2400;
         machine_state.processor_state.push_byte(
             &mut machine_state.mem_map,
             machine_state.processor_state.flags.bits,
@@ -4730,10 +4912,12 @@ pub mod tests {
         );
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn push_pop_op_bc() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        machine_state.processor_state.stack_pointer = 0x2400;
 
         // Push opcode for bc
         test_rom[0] = 0b11_00_0101;
@@ -4766,10 +4950,12 @@ pub mod tests {
         );
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn push_pop_op_a_flags() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        machine_state.processor_state.stack_pointer = 0x2400;
 
         // Push opcode for flags and acc
         test_rom[0] = 0b11_11_0101;
@@ -4818,10 +5004,12 @@ pub mod tests {
         assert_ne!(machine_state.processor_state.prog_counter, 1);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn xthl() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        machine_state.processor_state.stack_pointer = 0x2400;
 
         test_rom[0] = 0b11_100_011;
         machine_state.mem_map.rom = test_rom;
@@ -4843,7 +5031,8 @@ pub mod tests {
         assert_ne!(machine_state.processor_state.prog_counter, 0);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn sphl() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -4865,7 +5054,8 @@ pub mod tests {
         assert_ne!(machine_state.processor_state.prog_counter, 0);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn lda() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -4884,7 +5074,8 @@ pub mod tests {
         assert_ne!(machine_state.processor_state.prog_counter, 0);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn sta() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -4903,7 +5094,8 @@ pub mod tests {
         assert_ne!(machine_state.processor_state.prog_counter, 0);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn lhld() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -4925,7 +5117,8 @@ pub mod tests {
         assert_ne!(machine_state.processor_state.prog_counter, 0);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn shld() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -4946,7 +5139,8 @@ pub mod tests {
         assert_ne!(machine_state.processor_state.prog_counter, 0);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn stax() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
@@ -4966,7 +5160,8 @@ pub mod tests {
         assert_ne!(machine_state.processor_state.prog_counter, 0);
     }
 
-    #[wasm_bindgen_test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
     fn xchg() {
         let mut machine_state = MachineState::new();
         let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];

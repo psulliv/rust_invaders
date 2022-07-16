@@ -1,4 +1,6 @@
 #![allow(unused)]
+
+//!```text
 //!Interrupts: $cf (RST 8) at the start of vblank, $d7 (RST $10) at the end of vblank.
 //!
 //!Video: 256(x)*224(y) @ 60Hz, vertical monitor. Colours are simulated with a
@@ -68,6 +70,7 @@
 //!     `-------------------------------'
 //!
 //!     Way of out of proportion :P
+//!```
 
 use crate::{MemMap, ProcessorState};
 use std::sync::{Arc, Mutex};
@@ -95,6 +98,7 @@ pub enum Button {
 
 #[derive(Debug)]
 pub struct PortState {
+    ///```text
     ///Ports:
     ///     Read 1
     ///     BIT     0       coin (0 when active)
@@ -125,13 +129,15 @@ pub struct PortState {
     ///                     it writes text to the screen (0=a,1=b,2=c, etc)
     ///
     ///     (write ports 3,5,6 can be left unemulated, read port 1=$01 and 2=$00
-    ///     will make the game run, but but only in attract mode)    
+    ///     will make the game run, but but only in attract mode)
+    ///```
     pub read_port_1: u8,
     pub read_port_2: u8,
     pub read_port_3: u8,
     pub write_port_1: u8,
     pub write_port_2: u8,
     pub write_port_4: u8,
+    pub shift_register: u16,
 }
 
 impl PortState {
@@ -245,6 +251,7 @@ impl MachineState {
                 write_port_1: 0b0000_0000,
                 write_port_2: 0b0000_0000,
                 write_port_4: 0b0000_0000,
+                shift_register: 0b0000_0000,
             })),
             processor_state: ProcessorState::new(),
             mem_map: MemMap::new(),
