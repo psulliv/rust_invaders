@@ -2180,7 +2180,19 @@ fn opcode_ana(state: &mut ProcessorState, mem_map: &mut MemMap) {
         None => state.get_mem_value(RPairBitPattern::HL, mem_map),
     };
     state.reg_a &= reg;
+
+    // Clear CY & AC, set other flags per standard rules.
     state.flags &= !ConditionFlags::CY;
+    state.flags &= !ConditionFlags::AC;
+    if state.reg_a == 0 {
+        state.flags |= ConditionFlags::Z;
+    }
+    if (state.reg_a & 0b1000_0000) >> 7 == 1 {
+        state.flags |= ConditionFlags::S;
+    }
+    if state.reg_a.count_ones() % 2 == 0 {
+        state.flags |= ConditionFlags::P;
+    }
 }
 
 // DDD or SSS REGISTER NAME
@@ -3612,10 +3624,10 @@ pub mod tests {
         test_rom[0] = 0b10_100_000 | RegisterBitPattern::A as u8;
         machine_state.mem_map.rom = test_rom;
         machine_state.processor_state.reg_a = 0b0000_0000;
-        machine_state.processor_state.flags = ConditionFlags::CY;
+        machine_state.processor_state.flags = ConditionFlags::CY | ConditionFlags::AC;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b0000_0000);
-        assert_eq!(machine_state.processor_state.flags.bits, 0x00)
+        assert_eq!(machine_state.processor_state.flags, ConditionFlags::Z | ConditionFlags::P)
     }
 
     #[wasm_bindgen_test]
@@ -3629,7 +3641,7 @@ pub mod tests {
         machine_state.processor_state.flags = ConditionFlags::CY;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b0000_1100);
-        assert_eq!(machine_state.processor_state.flags.bits, 0x00)
+        assert_eq!(machine_state.processor_state.flags, ConditionFlags::P)
     }
 
     #[wasm_bindgen_test]
@@ -3649,7 +3661,7 @@ pub mod tests {
         machine_state.processor_state.flags = ConditionFlags::CY;
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0xff);
-        assert_eq!(machine_state.processor_state.flags.bits, 0x00)
+        assert_eq!(machine_state.processor_state.flags, ConditionFlags::P | ConditionFlags::S)
     }
 
     #[wasm_bindgen_test]
