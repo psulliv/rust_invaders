@@ -1184,8 +1184,7 @@ impl MachineState {
                 opcode_push(state, mem_map);
             }
             0xe6 => {
-                panic!("    ANI D8  2       Z, S, P, CY, AC A <- A & data");
-                // 2
+                opcode_ani(state, mem_map);
             }
             0xe7 => {
                 opcode_rst(state, mem_map);
@@ -2180,6 +2179,32 @@ fn opcode_ana(state: &mut ProcessorState, mem_map: &mut MemMap) {
         None => state.get_mem_value(RPairBitPattern::HL, mem_map),
     };
     state.reg_a &= reg;
+
+    // Clear CY & AC, set other flags per standard rules.
+    state.flags &= !ConditionFlags::CY;
+    state.flags &= !ConditionFlags::AC;
+    if state.reg_a == 0 {
+        state.flags |= ConditionFlags::Z;
+    }
+    if (state.reg_a & 0b1000_0000) >> 7 == 1 {
+        state.flags |= ConditionFlags::S;
+    }
+    if state.reg_a.count_ones() % 2 == 0 {
+        state.flags |= ConditionFlags::P;
+    }
+}
+
+/// ANI data (AND immediate)
+/// (A) ~ (A) /\ (byte 2)
+/// The content of the second byte of the instruction is
+/// logically anded with the contents of the accumulator.
+/// The result is placed in the accumulator. The CY and
+/// AC flags are cleared
+fn opcode_ani(state: &mut ProcessorState, mem_map: &mut MemMap) {
+    // 1 | 1 | 1 | 0 | 0 | 1 | 1 | 0
+    let second_byte = mem_map[state.prog_counter + 1];
+    state.prog_counter += 2;
+    state.reg_a &= second_byte;
 
     // Clear CY & AC, set other flags per standard rules.
     state.flags &= !ConditionFlags::CY;
@@ -3662,6 +3687,20 @@ pub mod tests {
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0xff);
         assert_eq!(machine_state.processor_state.flags, ConditionFlags::P | ConditionFlags::S)
+    }
+
+    #[wasm_bindgen_test]
+    fn ani() {
+        let mut machine_state = MachineState::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b11_100_110;
+        test_rom[1] = 0b0000_0100;
+        machine_state.mem_map.rom = test_rom;
+        machine_state.processor_state.reg_a = 0b0000_1111;
+        machine_state.processor_state.flags = ConditionFlags::AC;
+        machine_state.iterate_processor_state();
+        assert_eq!(machine_state.processor_state.reg_a, 0b0000_0100);
+        assert_eq!(machine_state.processor_state.flags.bits, 0b0000_0000)
     }
 
     #[wasm_bindgen_test]
