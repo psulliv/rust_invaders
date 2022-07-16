@@ -944,36 +944,28 @@ impl MachineState {
                 opcode_sbb(state, mem_map);
             }
             0xa0 => {
-                panic!("    ANA B   1       Z, S, P, CY, AC A <- A & B");
-                // 1
+                opcode_ana(state, mem_map);
             }
             0xa1 => {
-                panic!("    ANA C   1       Z, S, P, CY, AC A <- A & C");
-                // 1
+                opcode_ana(state, mem_map);
             }
             0xa2 => {
-                panic!("    ANA D   1       Z, S, P, CY, AC A <- A & D");
-                // 1
+                opcode_ana(state, mem_map);
             }
             0xa3 => {
-                panic!("    ANA E   1       Z, S, P, CY, AC A <- A & E");
-                // 1
+                opcode_ana(state, mem_map);
             }
             0xa4 => {
-                panic!("    ANA H   1       Z, S, P, CY, AC A <- A & H");
-                // 1
+                opcode_ana(state, mem_map);
             }
             0xa5 => {
-                panic!("    ANA L   1       Z, S, P, CY, AC A <- A & L");
-                // 1
+                opcode_ana(state, mem_map);
             }
             0xa6 => {
-                panic!("    ANA M   1       Z, S, P, CY, AC A <- A & (HL)");
-                // 1
+                opcode_ana(state, mem_map);
             }
             0xa7 => {
-                panic!("    ANA A   1       Z, S, P, CY, AC A <- A & A");
-                // 1
+                opcode_ana(state, mem_map);
             }
             0xa8 => {
                 panic!("    XRA B   1       Z, S, P, CY, AC A <- A ^ B");
@@ -2164,6 +2156,33 @@ fn opcode_daa(state: &mut ProcessorState) {
     }
 }
 
+/// ANA r (AND Register)
+/// (A) ~ (A) /\ (r)
+/// The content of register r is logically anded with the
+/// content of the accumulator. The result is placed in
+/// the accumulator. The CY flag is cleared.
+/// ANA M (AND memory)
+/// (A) ~ (A) /\ ((H) (L))
+/// The contents of the memory location whose address
+/// is contained in the Hand L registers is logically anded
+/// with the content of the accumulator. The result is
+/// placed in the accumulator. The CY flag is cleared.
+fn opcode_ana(state: &mut ProcessorState, mem_map: &mut MemMap) {
+    // 1 | 0 | 1 | 0 | 0 | S | S | S
+    // or
+    // 1 | 0 | 1 | 0 | 0 | 1 | 1 | 0
+    let cur_instruction = mem_map[state.prog_counter];
+    let src = get_source_register_bit_pattern(cur_instruction);
+    state.prog_counter += 1;
+
+    let reg = match state.get_reg_value(src) {
+        Some(reg) => reg,
+        None => state.get_mem_value(RPairBitPattern::HL, mem_map),
+    };
+    state.reg_a &= reg;
+    state.flags &= !ConditionFlags::CY;
+}
+
 // DDD or SSS REGISTER NAME
 // 111 A
 // 000 B
@@ -2356,7 +2375,7 @@ fn opcode_in(state: &mut ProcessorState, mem_map: &mut MemMap, ports: Arc<Mutex<
             state.reg_a = port_state.read_port_2;
         }
         0x03 => {
-	    // shift register not working yet
+            // shift register not working yet
             state.reg_a = port_state.read_port_3;
         }
         _ => {
@@ -3585,6 +3604,52 @@ pub mod tests {
             machine_state.processor_state.flags,
             ConditionFlags::P | ConditionFlags::AC
         )
+    }
+    #[wasm_bindgen_test]
+    fn ana_reg_a() {
+        let mut machine_state = MachineState::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b10_100_000 | RegisterBitPattern::A as u8;
+        machine_state.mem_map.rom = test_rom;
+        machine_state.processor_state.reg_a = 0b0000_0000;
+        machine_state.processor_state.flags = ConditionFlags::CY;
+        machine_state.iterate_processor_state();
+        assert_eq!(machine_state.processor_state.reg_a, 0b0000_0000);
+        assert_eq!(machine_state.processor_state.flags.bits, 0x00)
+    }
+
+    #[wasm_bindgen_test]
+    fn ana_other_reg() {
+        let mut machine_state = MachineState::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b10_100_000 | RegisterBitPattern::B as u8;
+        machine_state.mem_map.rom = test_rom;
+        machine_state.processor_state.reg_a = 0b1111_1100;
+        machine_state.processor_state.reg_b = 0b0000_1111;
+        machine_state.processor_state.flags = ConditionFlags::CY;
+        machine_state.iterate_processor_state();
+        assert_eq!(machine_state.processor_state.reg_a, 0b0000_1100);
+        assert_eq!(machine_state.processor_state.flags.bits, 0x00)
+    }
+
+    #[wasm_bindgen_test]
+    fn ana_mem() {
+        let mut machine_state = MachineState::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b10_100_000 | RegisterBitPattern::Other as u8;
+        machine_state.mem_map.rom = test_rom;
+        machine_state.processor_state.reg_a = 0xff;
+        machine_state.processor_state.reg_h =
+            ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) >> 8) as u8;
+        machine_state.processor_state.reg_l =
+            ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) & 0x00ff) as u8;
+        let address = ((machine_state.processor_state.reg_h as u16) << 8)
+            + machine_state.processor_state.reg_l as u16;
+        machine_state.mem_map[address.into()] = 0xff;
+        machine_state.processor_state.flags = ConditionFlags::CY;
+        machine_state.iterate_processor_state();
+        assert_eq!(machine_state.processor_state.reg_a, 0xff);
+        assert_eq!(machine_state.processor_state.flags.bits, 0x00)
     }
 
     #[wasm_bindgen_test]
