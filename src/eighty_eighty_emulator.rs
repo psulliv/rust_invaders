@@ -2138,6 +2138,7 @@ fn opcode_daa(state: &mut ProcessorState) {
     let aux_set = state.flags & ConditionFlags::AC == ConditionFlags::AC;
     let carry_set = state.flags & ConditionFlags::CY == ConditionFlags::CY;
     let mut correction: u8 = 0;
+    state.prog_counter += 1;
 
     if low > 0b1001 || aux_set {
         correction += 0b0110;
