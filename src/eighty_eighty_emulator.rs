@@ -26,6 +26,22 @@ bitflags! {
     }
 }
 
+impl ConditionFlags {
+    // Clear and reset Z, S, P flags per "standard" rules
+    pub fn set_zsp(&mut self, result: u8) {
+        self.remove(ConditionFlags::Z & ConditionFlags::S & ConditionFlags::P);
+        if result == 0 {
+            self.insert(ConditionFlags::Z);
+        }
+        if (result & 0b1000_0000) >> 7 == 1 {
+            self.insert(ConditionFlags::S);
+        }
+        if result.count_ones() % 2 == 0 {
+            self.insert(ConditionFlags::P);
+        }  
+    }
+}
+
 #[derive(PartialEq, Debug)]
 pub struct ProcessorState {
     reg_a: u8,
@@ -1661,49 +1677,6 @@ fn opcode_mvi(state: &mut ProcessorState, mem_map: &mut MemMap) {
     }
 }
 
-#[derive(PartialEq)]
-enum ArithmeticOpType {
-    Addition,
-    Subtraction,
-}
-
-// Clear all flags affected by arithmetic operations, then set flags as needed.
-fn update_arithmetic_flags(
-    state: &mut ProcessorState,
-    op_type: ArithmeticOpType,
-    carry: bool,
-    aux_carry: bool,
-) {
-    let is_addition = op_type == ArithmeticOpType::Addition;
-    state.flags &= !ConditionFlags::Z
-        & !ConditionFlags::S
-        & !ConditionFlags::P
-        & !ConditionFlags::CY
-        & !ConditionFlags::AC;
-    if state.reg_a == 0 {
-        state.flags |= ConditionFlags::Z;
-    }
-    if (state.reg_a & 0b1000_0000) >> 7 == 1 {
-        state.flags |= ConditionFlags::S;
-    }
-    if state.reg_a.count_ones() % 2 == 0 {
-        state.flags |= ConditionFlags::P;
-    }
-    if carry && is_addition {
-        state.flags |= ConditionFlags::CY;
-    }
-    if !carry && !is_addition {
-        // If there is no carry out of the high-order bit position, indicating that
-        // a borrow occurred, the Carry bit is set; otherwise it is reset.
-        // Note that this differs from an add operation, which resets the carry if
-        // no overflow occurs.
-        state.flags |= ConditionFlags::CY;
-    }
-    if aux_carry {
-        state.flags |= ConditionFlags::AC;
-    }
-}
-
 /// ADD r (Add Register)
 /// (A) ~ (A) + (r)
 /// The content of register r is added to the content of
@@ -1739,7 +1712,11 @@ fn opcode_add(state: &mut ProcessorState, mem_map: &mut MemMap) {
     // Perform addition, move sum into accumulator.
     let (sum, overflow) = state.reg_a.overflowing_add(addend);
     state.reg_a = sum;
-    update_arithmetic_flags(state, ArithmeticOpType::Addition, overflow, aux_carry);
+
+    state.flags = ConditionFlags::empty();
+    state.flags.set_zsp(state.reg_a);
+    state.flags.set(ConditionFlags::CY, overflow);
+    state.flags.set(ConditionFlags::AC, aux_carry);
 }
 
 /// ADI data (Add Immediate)
@@ -1759,7 +1736,11 @@ fn opcode_adi(state: &mut ProcessorState, mem_map: &mut MemMap) {
     // Perform addition, move sum into accumulator.
     let (sum, overflow) = state.reg_a.overflowing_add(second_byte);
     state.reg_a = sum;
-    update_arithmetic_flags(state, ArithmeticOpType::Addition, overflow, aux_carry);
+
+    state.flags = ConditionFlags::empty();
+    state.flags.set_zsp(state.reg_a);
+    state.flags.set(ConditionFlags::CY, overflow);
+    state.flags.set(ConditionFlags::AC, aux_carry);
 }
 
 /// ADC r (Add Register with carry)
@@ -1787,7 +1768,6 @@ fn opcode_adc(state: &mut ProcessorState, mem_map: &mut MemMap) {
             state.get_mem_value(RPairBitPattern::HL, mem_map)
         }
     };
-
     let cf_state: u8 = state.check_condition(ConditionBitPattern::C).into();
 
     // Add first four bits (+1 for carry flag, if set) to detect carry to fifth.
@@ -1800,7 +1780,10 @@ fn opcode_adc(state: &mut ProcessorState, mem_map: &mut MemMap) {
     let overflow = overflow_first_add || overflow_second_add;
     state.reg_a = sum;
 
-    update_arithmetic_flags(state, ArithmeticOpType::Addition, overflow, aux_carry);
+    state.flags = ConditionFlags::empty();
+    state.flags.set_zsp(state.reg_a);
+    state.flags.set(ConditionFlags::CY, overflow);
+    state.flags.set(ConditionFlags::AC, aux_carry);
 }
 
 /// ACI data (Add immediate with carry)
@@ -1825,7 +1808,11 @@ fn opcode_aci(state: &mut ProcessorState, mem_map: &mut MemMap) {
     let (sum, overflow_second_add) = sum.overflowing_add(cf_state);
     let overflow = overflow_first_add || overflow_second_add;
     state.reg_a = sum;
-    update_arithmetic_flags(state, ArithmeticOpType::Addition, overflow, aux_carry);
+
+    state.flags = ConditionFlags::empty();
+    state.flags.set_zsp(state.reg_a);
+    state.flags.set(ConditionFlags::CY, overflow);
+    state.flags.set(ConditionFlags::AC, aux_carry);
 }
 
 /// SUB r (Subtract register)
@@ -1866,7 +1853,11 @@ fn opcode_sub(state: &mut ProcessorState, mem_map: &mut MemMap) {
     // Perform addition, move sum into accumulator.
     let (sum, overflow) = state.reg_a.overflowing_add(twos_complement);
     state.reg_a = sum;
-    update_arithmetic_flags(state, ArithmeticOpType::Subtraction, overflow, aux_carry);
+
+    state.flags = ConditionFlags::empty();
+    state.flags.set_zsp(state.reg_a);
+    state.flags.set(ConditionFlags::CY, !overflow);
+    state.flags.set(ConditionFlags::AC, aux_carry);
 }
 
 /// SUI data (Subtract immediate)
@@ -1883,7 +1874,11 @@ fn opcode_sui(state: &mut ProcessorState, mem_map: &mut MemMap) {
     let aux_carry = low_add & 0x10 != 0;
     let (sum, overflow) = state.reg_a.overflowing_add(twos_complement);
     state.reg_a = sum;
-    update_arithmetic_flags(state, ArithmeticOpType::Subtraction, overflow, aux_carry);
+
+    state.flags = ConditionFlags::empty();
+    state.flags.set_zsp(state.reg_a);
+    state.flags.set(ConditionFlags::CY, !overflow);
+    state.flags.set(ConditionFlags::AC, aux_carry);
 }
 
 /// SBB r (Subtract Register with borrow)
@@ -1914,14 +1909,18 @@ fn opcode_sbb(state: &mut ProcessorState, mem_map: &mut MemMap) {
             state.get_mem_value(RPairBitPattern::HL, mem_map)
         }
     };
-    // Perform subtraction using two's complement and set flags as needed.
+    // Perform subtraction using two's complement
     let cf_state = state.check_condition(ConditionBitPattern::C);
     let twos_complement = (subtrahend + cf_state as u8).wrapping_neg();
     let low_add = (state.reg_a & 0x0f) + (twos_complement & 0x0f);
     let (sum, overflow) = state.reg_a.overflowing_add(twos_complement);
     let aux_carry = low_add & 0x10 != 0;
     state.reg_a = sum;
-    update_arithmetic_flags(state, ArithmeticOpType::Subtraction, overflow, aux_carry);
+
+    state.flags = ConditionFlags::empty();
+    state.flags.set_zsp(state.reg_a);
+    state.flags.set(ConditionFlags::CY, !overflow);
+    state.flags.set(ConditionFlags::AC, aux_carry);
 }
 
 /// SBI data (Subtract immediate with borrow)
@@ -1935,15 +1934,18 @@ fn opcode_sbi(state: &mut ProcessorState, mem_map: &mut MemMap) {
     let second_byte = mem_map[state.prog_counter + 1];
     state.prog_counter += 2;
 
-    // Perform subtraction using two's complement, then set flags as needed.
+    // Perform subtraction using two's complement
     let cf_state = state.check_condition(ConditionBitPattern::C);
     let twos_complement = (second_byte + cf_state as u8).wrapping_neg();
     let low_add = (state.reg_a & 0x0f) + (twos_complement & 0x0f);
     let (sum, overflow) = state.reg_a.overflowing_add(twos_complement);
-
     let aux_carry = low_add & 0x10 != 0;
     state.reg_a = sum;
-    update_arithmetic_flags(state, ArithmeticOpType::Subtraction, overflow, aux_carry);
+
+    state.flags = ConditionFlags::empty();
+    state.flags.set_zsp(state.reg_a);
+    state.flags.set(ConditionFlags::CY, !overflow);
+    state.flags.set(ConditionFlags::AC, aux_carry);
 }
 
 /// INR r (Increment Register)
@@ -1983,18 +1985,9 @@ fn opcode_inr(state: &mut ProcessorState, mem_map: &mut MemMap) {
     }
     let aux_carry = low_add & 0x10 != 0;
 
-    // Reset all flags except CY, then set flags as needed.
-    state.flags &=
-        !ConditionFlags::Z & !ConditionFlags::S & !ConditionFlags::P & !ConditionFlags::AC;
-    if result == 0 {
-        state.flags |= ConditionFlags::Z;
-    }
-    if (result & 0b1000_0000) >> 7 == 1 {
-        state.flags |= ConditionFlags::S;
-    }
-    if result.count_ones() % 2 == 0 {
-        state.flags |= ConditionFlags::P;
-    }
+    // Update all flags except CY
+    state.flags.set_zsp(result);
+    state.flags &= !ConditionFlags::AC;
     if aux_carry {
         state.flags |= ConditionFlags::AC;
     }
@@ -2036,22 +2029,8 @@ fn opcode_dcr(state: &mut ProcessorState, mem_map: &mut MemMap) {
         }
     }
     let aux_carry = low_add & 0x10 != 0;
-
-    // Reset all flags except CY, then set flags as needed.
-    state.flags &=
-        !ConditionFlags::Z & !ConditionFlags::S & !ConditionFlags::P & !ConditionFlags::AC;
-    if result == 0 {
-        state.flags |= ConditionFlags::Z;
-    }
-    if (result & 0b1000_0000) >> 7 == 1 {
-        state.flags |= ConditionFlags::S;
-    }
-    if result.count_ones() % 2 == 0 {
-        state.flags |= ConditionFlags::P;
-    }
-    if aux_carry {
-        state.flags |= ConditionFlags::AC;
-    }
+    state.flags.set(ConditionFlags::AC, aux_carry);
+    state.flags.set_zsp(result);
 }
 
 /// DCX rp (Decrement register pair)
@@ -2083,13 +2062,7 @@ fn opcode_dad(state: &mut ProcessorState, mem_map: &mut MemMap) {
     let (sum, overflow) = hl_value.overflowing_add(rp_value);
     state.reg_h = ((0xff00 & sum) >> 8) as u8;
     state.reg_l = (0x00ff & sum) as u8;
-
-    // Set/reset CY flag only.
-    if overflow {
-        state.flags |= ConditionFlags::CY;
-    } else {
-        state.flags &= !ConditionFlags::CY;
-    }
+    state.flags.set(ConditionFlags::CY, overflow);
 }
 
 /// DAA (Decimal Adjust Accumulator)
@@ -2124,17 +2097,7 @@ fn opcode_daa(state: &mut ProcessorState) {
         state.flags |= ConditionFlags::CY;
     }
     state.reg_a = state.reg_a.wrapping_add(correction);
-
-    // Set remaining flags
-    if state.reg_a == 0 {
-        state.flags |= ConditionFlags::Z;
-    }
-    if (state.reg_a & 0b1000_0000) >> 7 == 1 {
-        state.flags |= ConditionFlags::S;
-    }
-    if state.reg_a.count_ones() % 2 == 0 {
-        state.flags |= ConditionFlags::P;
-    }
+    state.flags.set_zsp(state.reg_a);
 }
 
 /// ANA r (AND Register)
@@ -2161,19 +2124,8 @@ fn opcode_ana(state: &mut ProcessorState, mem_map: &mut MemMap) {
         None => state.get_mem_value(RPairBitPattern::HL, mem_map),
     };
     state.reg_a &= reg;
-
-    // Clear CY & AC, set other flags per standard rules.
-    state.flags &= !ConditionFlags::CY;
-    state.flags &= !ConditionFlags::AC;
-    if state.reg_a == 0 {
-        state.flags |= ConditionFlags::Z;
-    }
-    if (state.reg_a & 0b1000_0000) >> 7 == 1 {
-        state.flags |= ConditionFlags::S;
-    }
-    if state.reg_a.count_ones() % 2 == 0 {
-        state.flags |= ConditionFlags::P;
-    }
+    state.flags = ConditionFlags::empty();
+    state.flags.set_zsp(state.reg_a);
 }
 
 /// ANI data (AND immediate)
@@ -2187,19 +2139,8 @@ fn opcode_ani(state: &mut ProcessorState, mem_map: &mut MemMap) {
     let second_byte = mem_map[state.prog_counter + 1];
     state.prog_counter += 2;
     state.reg_a &= second_byte;
-
-    // Clear CY & AC, set other flags per standard rules.
-    state.flags &= !ConditionFlags::CY;
-    state.flags &= !ConditionFlags::AC;
-    if state.reg_a == 0 {
-        state.flags |= ConditionFlags::Z;
-    }
-    if (state.reg_a & 0b1000_0000) >> 7 == 1 {
-        state.flags |= ConditionFlags::S;
-    }
-    if state.reg_a.count_ones() % 2 == 0 {
-        state.flags |= ConditionFlags::P;
-    }
+    state.flags = ConditionFlags::empty();
+    state.flags.set_zsp(state.reg_a);
 }
 
 /// XRA r (Exclusive OR Register)
@@ -2227,19 +2168,8 @@ fn opcode_xra(state: &mut ProcessorState, mem_map: &mut MemMap) {
         None => state.get_mem_value(RPairBitPattern::HL, mem_map),
     };
     state.reg_a ^= reg;
-
-    // Clear CY & AC, set other flags per standard rules.
-    state.flags &= !ConditionFlags::CY;
-    state.flags &= !ConditionFlags::AC;
-    if state.reg_a == 0 {
-        state.flags |= ConditionFlags::Z;
-    }
-    if (state.reg_a & 0b1000_0000) >> 7 == 1 {
-        state.flags |= ConditionFlags::S;
-    }
-    if state.reg_a.count_ones() % 2 == 0 {
-        state.flags |= ConditionFlags::P;
-    }
+    state.flags = ConditionFlags::empty();
+    state.flags.set_zsp(state.reg_a);
 }
 
 /// XRI data (Exclusive OR immediate)
@@ -2253,19 +2183,8 @@ fn opcode_xri(state: &mut ProcessorState, mem_map: &mut MemMap) {
     let second_byte = mem_map[state.prog_counter + 1];
     state.prog_counter += 2;
     state.reg_a ^= second_byte;
-
-    // Clear CY & AC, set other flags per standard rules.
-    state.flags &= !ConditionFlags::CY;
-    state.flags &= !ConditionFlags::AC;
-    if state.reg_a == 0 {
-        state.flags |= ConditionFlags::Z;
-    }
-    if (state.reg_a & 0b1000_0000) >> 7 == 1 {
-        state.flags |= ConditionFlags::S;
-    }
-    if state.reg_a.count_ones() % 2 == 0 {
-        state.flags |= ConditionFlags::P;
-    }
+    state.flags = ConditionFlags::empty();
+    state.flags.set_zsp(state.reg_a);
 }
 
 /// ORA r (OR Register)
@@ -2293,19 +2212,8 @@ fn opcode_ora(state: &mut ProcessorState, mem_map: &mut MemMap) {
         None => state.get_mem_value(RPairBitPattern::HL, mem_map),
     };
     state.reg_a |= reg;
-
-    // Clear CY & AC, set other flags per standard rules.
-    state.flags &= !ConditionFlags::CY;
-    state.flags &= !ConditionFlags::AC;
-    if state.reg_a == 0 {
-        state.flags |= ConditionFlags::Z;
-    }
-    if (state.reg_a & 0b1000_0000) >> 7 == 1 {
-        state.flags |= ConditionFlags::S;
-    }
-    if state.reg_a.count_ones() % 2 == 0 {
-        state.flags |= ConditionFlags::P;
-    }
+    state.flags = ConditionFlags::empty();
+    state.flags.set_zsp(state.reg_a);
 }
 
 /// ORI data (OR immediate)
@@ -2319,19 +2227,8 @@ fn opcode_ori(state: &mut ProcessorState, mem_map: &mut MemMap) {
     let second_byte = mem_map[state.prog_counter + 1];
     state.prog_counter += 2;
     state.reg_a |= second_byte;
-
-    // Clear CY & AC, set other flags per standard rules.
-    state.flags &= !ConditionFlags::CY;
-    state.flags &= !ConditionFlags::AC;
-    if state.reg_a == 0 {
-        state.flags |= ConditionFlags::Z;
-    }
-    if (state.reg_a & 0b1000_0000) >> 7 == 1 {
-        state.flags |= ConditionFlags::S;
-    }
-    if state.reg_a.count_ones() % 2 == 0 {
-        state.flags |= ConditionFlags::P;
-    }
+    state.flags = ConditionFlags::empty();
+    state.flags.set_zsp(state.reg_a);
 }
 
 // DDD or SSS REGISTER NAME
