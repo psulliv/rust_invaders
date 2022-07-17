@@ -1032,36 +1032,28 @@ impl MachineState {
                 opcode_ora(state, mem_map);
             }
             0xb8 => {
-                panic!("    CMP B   1       Z, S, P, CY, AC A - B");
-                // 1
+                opcode_cmp(state, mem_map);
             }
             0xb9 => {
-                panic!("    CMP C   1       Z, S, P, CY, AC A - C");
-                // 1
+                opcode_cmp(state, mem_map);
             }
             0xba => {
-                panic!("    CMP D   1       Z, S, P, CY, AC A - D");
-                // 1
+                opcode_cmp(state, mem_map);
             }
             0xbb => {
-                panic!("    CMP E   1       Z, S, P, CY, AC A - E");
-                // 1
+                opcode_cmp(state, mem_map);
             }
             0xbc => {
-                panic!("    CMP H   1       Z, S, P, CY, AC A - H");
-                // 1
+                opcode_cmp(state, mem_map);
             }
             0xbd => {
-                panic!("    CMP L   1       Z, S, P, CY, AC A - L");
-                // 1
+                opcode_cmp(state, mem_map);
             }
             0xbe => {
-                panic!("    CMP M   1       Z, S, P, CY, AC A - (HL)");
-                // 1
+                opcode_cmp(state, mem_map);
             }
             0xbf => {
-                panic!("    CMP A   1       Z, S, P, CY, AC A - A");
-                // 1
+                opcode_cmp(state, mem_map);
             }
             0xc0 => {
                 opcode_ret(state, mem_map);
@@ -1257,8 +1249,7 @@ impl MachineState {
                 panic!(" Bogus opcode parsed, bailing");
             }
             0xfe => {
-                panic!("    CPI D8  2       Z, S, P, CY, AC A - data");
-                // 2
+                opcode_cpi(state, mem_map);
             }
             0xff => {
                 opcode_rst(state, mem_map);
@@ -2229,6 +2220,74 @@ fn opcode_ori(state: &mut ProcessorState, mem_map: &mut MemMap) {
     state.reg_a |= second_byte;
     state.flags = ConditionFlags::empty();
     state.flags.set_zsp(state.reg_a);
+}
+
+/// CMP r (Compare Register)
+/// (A) - (r)
+/// The content of register r is subtracted from the 
+/// accumulator. The accumulator remains unchanged. The 
+/// condition flags are set as a result of the subtraction.
+/// The Z flag is set to 1 if (A) = (r). The CY flag is 
+/// set to 1 if (A) < (r) .
+/// CMP M (Compare memory)
+/// (A) - ((H) (L))
+/// The content of the memory location whose address
+/// is contained in the Hand L registers is subtracted
+/// from the accumulator. The accumulator remains unchanged.
+/// The condition flags are set as a result of the
+/// subtraction. The Z flag is set to 1 if (A) = ((H) (L)).
+/// The CY flag is set to 1 if (A) < ((H) (L)).
+fn opcode_cmp(state: &mut ProcessorState, mem_map: &mut MemMap) {
+    // 1 | 0 | 1 | 1 | 1 | S | S | S
+    // or
+    // 1 | 0 | 1 | 1 | 1 | 1 | 1 | 0
+    let cur_instruction = mem_map[state.prog_counter];
+    let src = get_source_register_bit_pattern(cur_instruction);
+    state.prog_counter |= 1;
+
+    let subtrahend = match state.get_reg_value(src) {
+        Some(subtrahend) => subtrahend,
+        None => state.get_mem_value(RPairBitPattern::HL, mem_map),
+    };
+    let twos_complement = subtrahend.wrapping_neg();
+
+    // Add first four bits to detect carry to fifth.
+    let low_add = (state.reg_a & 0x0f) + (twos_complement & 0x0f);
+    let aux_carry = low_add & 0x10 != 0;
+
+    let difference = state.reg_a.wrapping_add(twos_complement);
+    
+    state.flags = ConditionFlags::empty();
+    state.flags.set_zsp(difference);    // To set S & P; Z is overwritten in next line.
+    state.flags.set(ConditionFlags::Z, difference == 0);
+    state.flags.set(ConditionFlags::CY, state.reg_a < subtrahend);
+    state.flags.set(ConditionFlags::AC, aux_carry);
+}
+
+/// CPI data (Compare immediate)
+/// (A) - (byte 2)
+/// The content of the second byte of the instruction is
+/// subtracted from the accumulator. The condition flags
+/// are set by the result of the subtraction. The Z flag is
+/// set to 1 if (A) = (byte 2). The CY flag is set to 1 if
+/// (A) < (byte 2).
+fn opcode_cpi(state: &mut ProcessorState, mem_map: &mut MemMap) {
+    // 1 | 1 | 1 | 1 | 1 | 1 | 1 | 0
+    let second_byte = mem_map[state.prog_counter + 1];
+    state.prog_counter += 2;
+    let twos_complement = second_byte.wrapping_neg();
+
+    // Add first four bits to detect carry to fifth.
+    let low_add = (state.reg_a & 0x0f) + (twos_complement & 0x0f);
+    let aux_carry = low_add & 0x10 != 0;
+
+    let difference = state.reg_a.wrapping_add(twos_complement);
+    
+    state.flags = ConditionFlags::empty();
+    state.flags.set_zsp(difference);    // To set S & P; Z is overwritten in next line.
+    state.flags.set(ConditionFlags::Z, difference == 0);
+    state.flags.set(ConditionFlags::CY, state.reg_a < second_byte);
+    state.flags.set(ConditionFlags::AC, aux_carry);
 }
 
 // DDD or SSS REGISTER NAME
@@ -3836,6 +3895,66 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.reg_a, 0b0000_1111);
         assert_eq!(machine_state.processor_state.flags, ConditionFlags::P)
     }
+
+    #[wasm_bindgen_test]
+    fn cmp_reg_a() {
+        let mut machine_state = MachineState::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b10_111_000 | RegisterBitPattern::A as u8;
+        machine_state.mem_map.rom = test_rom;
+        machine_state.processor_state.reg_a = 0b0000_1111;
+        machine_state.iterate_processor_state();
+        assert_eq!(machine_state.processor_state.reg_a, 0b0000_1111);
+        assert_eq!(machine_state.processor_state.flags, ConditionFlags::Z | ConditionFlags::P | ConditionFlags::AC)
+    }
+
+    #[wasm_bindgen_test]
+    fn cmp_other_reg() {
+        let mut machine_state = MachineState::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b10_111_000 | RegisterBitPattern::D as u8;
+        machine_state.mem_map.rom = test_rom;
+        machine_state.processor_state.reg_a = 0b0000_1111;
+        machine_state.processor_state.reg_d = 0b1111_1111;
+        machine_state.iterate_processor_state();
+        assert_eq!(machine_state.processor_state.reg_a, 0b0000_1111);
+        assert_eq!(machine_state.processor_state.reg_d, 0b1111_1111);
+        assert_eq!(machine_state.processor_state.flags, ConditionFlags::AC | ConditionFlags::CY)
+    }
+
+    #[wasm_bindgen_test]
+    fn cmp_mem() {
+        let mut machine_state = MachineState::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b10_111_000 | RegisterBitPattern::Other as u8;
+        machine_state.mem_map.rom = test_rom;
+        machine_state.processor_state.reg_h =
+            ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) >> 8) as u8;
+        machine_state.processor_state.reg_l =
+            ((space_invaders_rom::SPACE_INVADERS_ROM.len() as u16) & 0x00ff) as u8;
+        let address = ((machine_state.processor_state.reg_h as u16) << 8)
+            + machine_state.processor_state.reg_l as u16;
+        machine_state.mem_map[address.into()] = 0b1000_0000;
+        machine_state.processor_state.reg_a = 0b1000_0001;
+        machine_state.iterate_processor_state();
+        assert_eq!(machine_state.processor_state.reg_a, 0b1000_0001);
+        assert_eq!(machine_state.mem_map[address.into()], 0b1000_0000);        
+        assert_eq!(machine_state.processor_state.flags.bits, 0b0000_0000)
+    }
+
+    #[wasm_bindgen_test]
+    fn cpi() {
+        let mut machine_state = MachineState::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b11_111_110;
+        test_rom[1] = 0b0000_1000;
+        machine_state.mem_map.rom = test_rom;
+        machine_state.processor_state.reg_a = 0b0000_1111;
+        machine_state.processor_state.flags = ConditionFlags::AC;
+        machine_state.iterate_processor_state();
+        assert_eq!(machine_state.processor_state.reg_a, 0b0000_1111);
+        assert_eq!(machine_state.processor_state.flags, ConditionFlags::AC)
+    }    
 
     #[wasm_bindgen_test]
     fn call_uncon() {
