@@ -409,10 +409,7 @@ impl MachineState {
                 opcode_mvi(state, mem_map);
             }
             0x07 => {
-                panic!(
-                    "    RLC     1       CY      A = A << 1; bit 0 = prev bit 7; CY = prev bit 7"
-                );
-                // 1
+                opcode_rlc(state);
             }
             0x08 => {
                 panic!("    -                       ");
@@ -438,10 +435,7 @@ impl MachineState {
                 opcode_mvi(state, mem_map);
             }
             0x0f => {
-                panic!(
-                    "    RRC     1       CY      A = A >> 1; bit 7 = prev bit 0; CY = prev bit 0"
-                );
-                // 1
+                opcode_rrc(state);
             }
             0x10 => {
                 panic!("    -                       ");
@@ -467,8 +461,7 @@ impl MachineState {
                 opcode_mvi(state, mem_map);
             }
             0x17 => {
-                panic!("    RAL     1       CY      A = A << 1; bit 0 = prev CY; CY = prev bit 7");
-                // 1
+                opcode_ral(state);
             }
             0x18 => {
                 panic!("    -                       ");
@@ -493,10 +486,7 @@ impl MachineState {
                 opcode_mvi(state, mem_map);
             }
             0x1f => {
-                panic!(
-                    "    RAR     1       CY      A = A >> 1; bit 7 = prev bit 7; CY = prev bit 0"
-                );
-                // 1
+                opcode_rar(state);
             }
             0x20 => {
                 panic!("    -                       ");
@@ -2290,6 +2280,68 @@ fn opcode_cpi(state: &mut ProcessorState, mem_map: &mut MemMap) {
     state.flags.set(ConditionFlags::AC, aux_carry);
 }
 
+/// RLC (Rotate Left)
+/// (An+l) ~ (An) ; (AO) ~ (A7)
+/// (CY) ~ (A7)
+/// The content of the accumulator is rotated left one
+/// position. The low order bit and the CY flag are both
+/// set to the value shifted out of the high order bit
+/// position. Only the CY flag is affected.
+fn opcode_rlc(state: &mut ProcessorState) {
+    // 0 | 0 | 0 | 0 | 0 | 1 | 1 | 1
+    state.prog_counter += 1;
+    state.reg_a = state.reg_a.rotate_left(1);
+    state.flags.set(ConditionFlags::CY, (state.reg_a & 0x01) == 1);
+}
+
+/// RRC (Rotate Right)
+/// (An) ~ (An-,); (A7) (AO)
+/// (CY) (AO)
+/// The content of the accumulator is rotated right one
+/// position. The high order bit and the CY flag are both
+/// set to the value shifted out of the low order bit 
+/// position. Only the CY flag is affected.
+fn opcode_rrc(state: &mut ProcessorState) {
+    // 0 | 0 | 0 | 0 | 1 | 1 | 1 | 1
+    state.prog_counter += 1;
+    state.reg_a = state.reg_a.rotate_right(1);
+    state.flags.set(ConditionFlags::CY, (state.reg_a & 0x80) == 1);
+}
+
+/// RAL (Rotate left through carry)
+/// (An+1) ~ (An) ; (CY) ~ (A7)
+/// (A0) ~ (CY)
+/// The content of the accumulator is rotated left one
+/// position through the CY flag. The low order bit is set
+/// equal to the CY flag and the CY flag is set to the
+/// value shifted out of the high order bit. Only the CY
+/// flag is affected.
+fn opcode_ral(state: &mut ProcessorState) {
+    // 0 | 0 | 0 | 0 | 0 | 1 | 1 | 1
+    state.prog_counter += 1;
+    let high_bit = state.reg_a >> 7;
+    state.reg_a = state.reg_a << 1;
+    state.reg_a |= (state.flags & ConditionFlags::CY != ConditionFlags::empty()) as u8;
+    state.flags.set(ConditionFlags::CY, high_bit != 0);
+}
+
+/// RAR (Rotate right through carry)
+/// (An) ~ (An+l); (CY) ~ (AO)
+/// (A7) ~ (CY)
+/// The content of the accumulator is rotated right one
+/// position through the CY flag. The high order bit is set
+/// to the CY flag and the CY flag is set to the value
+/// shifted out of the low order bit. Only the CY flag is
+/// affected
+fn opcode_rar(state: &mut ProcessorState) {
+    // 0 | 0 | 0 | 1 | 1 | 1 | 1 | 1
+    state.prog_counter += 1;
+    let low_bit = state.reg_a & 0x01;
+    state.reg_a = state.reg_a >> 1;
+    state.reg_a |= ((state.flags & ConditionFlags::CY != ConditionFlags::empty()) as u8) << 7;
+    state.flags.set(ConditionFlags::CY, low_bit != 0);
+}
+
 // DDD or SSS REGISTER NAME
 // 111 A
 // 000 B
@@ -3954,7 +4006,57 @@ pub mod tests {
         machine_state.iterate_processor_state();
         assert_eq!(machine_state.processor_state.reg_a, 0b0000_1111);
         assert_eq!(machine_state.processor_state.flags, ConditionFlags::AC)
-    }    
+    }
+
+    #[wasm_bindgen_test]
+    fn rlc() {
+        let mut machine_state = MachineState::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b00_000_111;
+        machine_state.mem_map.rom = test_rom;
+        machine_state.processor_state.reg_a = 0b1010_1010;
+        machine_state.iterate_processor_state();
+        assert_eq!(machine_state.processor_state.reg_a, 0b0101_0101);
+        assert_eq!(machine_state.processor_state.flags, ConditionFlags::CY)
+    }
+
+    #[wasm_bindgen_test]
+    fn rrc() {
+        let mut machine_state = MachineState::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b00_001_111;
+        machine_state.mem_map.rom = test_rom;
+        machine_state.processor_state.reg_a = 0b1010_1010;
+        machine_state.iterate_processor_state();
+        assert_eq!(machine_state.processor_state.reg_a, 0b0101_0101);
+        assert_eq!(machine_state.processor_state.flags, ConditionFlags::empty())
+    }
+
+    #[wasm_bindgen_test]
+    fn ral() {
+        let mut machine_state = MachineState::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b00_010_111;
+        machine_state.mem_map.rom = test_rom;
+        machine_state.processor_state.reg_a = 0b1010_1010;
+        machine_state.processor_state.flags = ConditionFlags::CY;
+        machine_state.iterate_processor_state();
+        assert_eq!(machine_state.processor_state.reg_a, 0b0101_0101);
+        assert_eq!(machine_state.processor_state.flags, ConditionFlags::CY)
+    }
+
+    #[wasm_bindgen_test]
+    fn rar() {
+        let mut machine_state = MachineState::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b00_011_111;
+        machine_state.mem_map.rom = test_rom;
+        machine_state.processor_state.reg_a = 0b1010_1010;
+        machine_state.processor_state.flags = ConditionFlags::CY;
+        machine_state.iterate_processor_state();
+        assert_eq!(machine_state.processor_state.reg_a, 0b1101_0101);
+        assert_eq!(machine_state.processor_state.flags, ConditionFlags::empty())
+    }
 
     #[wasm_bindgen_test]
     fn call_uncon() {
