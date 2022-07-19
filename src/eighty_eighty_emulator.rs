@@ -537,8 +537,7 @@ impl MachineState {
                 opcode_mvi(state, mem_map);
             }
             0x2f => {
-                panic!("    CMA     1               A <- !A");
-                // 1
+                opcode_cma(state);
             }
             0x30 => {
                 panic!("    -                       ");
@@ -564,8 +563,7 @@ impl MachineState {
                 opcode_mvi(state, mem_map);
             }
             0x37 => {
-                panic!("    STC     1       CY      CY = 1");
-                // 1
+                opcode_stc(state);
             }
             0x38 => {
                 panic!("    -                       ");
@@ -590,8 +588,7 @@ impl MachineState {
                 opcode_mvi(state, mem_map);
             }
             0x3f => {
-                panic!("    CMC     1       CY      CY=!CY");
-                // 1
+                opcode_cmc(state);
             }
             0x40 => {
                 opcode_mov(state, mem_map);
@@ -2342,6 +2339,34 @@ fn opcode_rar(state: &mut ProcessorState) {
     state.flags.set(ConditionFlags::CY, low_bit != 0);
 }
 
+/// CMA (Complement accumulator)
+/// The contents of the accumulator are complemented-
+/// (zero bits become 1, one bits become 0). No flags are
+/// affected.
+fn opcode_cma(state: &mut ProcessorState) {
+    // 0 | 0 | 1 | 0 | 1 | 1 | 1 | 1
+    state.prog_counter += 1;
+    state.reg_a = !state.reg_a;
+}
+
+/// CMC (Complement carry)
+/// The CY flag is complemented. No other flags are
+/// affected.
+fn opcode_cmc(state: &mut ProcessorState) {
+    // 0 | 0 | 1 | 1 | 1 | 1 | 1 | 1
+    state.prog_counter += 1;
+    state.flags.toggle(ConditionFlags::CY)
+}
+
+/// STC (Set carry)
+/// (CY) ~ 1
+/// The CY flag is set to 1. No other flags are affected.
+fn opcode_stc(state: &mut ProcessorState) {
+    // 0 | 0 | 1 | 1 | 0 | 1 | 1 | 1
+    state.prog_counter += 1;
+    state.flags.set(ConditionFlags::CY, true)
+}
+
 // DDD or SSS REGISTER NAME
 // 111 A
 // 000 B
@@ -4057,6 +4082,38 @@ pub mod tests {
         assert_eq!(machine_state.processor_state.reg_a, 0b1101_0101);
         assert_eq!(machine_state.processor_state.flags, ConditionFlags::empty())
     }
+
+    #[wasm_bindgen_test]
+    fn cma() {
+        let mut machine_state = MachineState::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b00_101_111;
+        machine_state.mem_map.rom = test_rom;
+        machine_state.processor_state.reg_a = 0b1111_0000;
+        machine_state.iterate_processor_state();
+        assert_eq!(machine_state.processor_state.reg_a, 0b0000_1111);
+    }
+
+    #[wasm_bindgen_test]
+    fn cmc() {
+        let mut machine_state = MachineState::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b00_111_111;
+        machine_state.mem_map.rom = test_rom;
+        machine_state.processor_state.flags = ConditionFlags::CY;
+        machine_state.iterate_processor_state();
+        assert_eq!(machine_state.processor_state.flags, ConditionFlags::empty());
+    }
+
+    #[wasm_bindgen_test]
+    fn stc() {
+        let mut machine_state = MachineState::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b00_110_111;
+        machine_state.mem_map.rom = test_rom;
+        machine_state.iterate_processor_state();
+        assert_eq!(machine_state.processor_state.flags, ConditionFlags::CY);
+    }    
 
     #[wasm_bindgen_test]
     fn call_uncon() {
