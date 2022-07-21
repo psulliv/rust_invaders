@@ -28,7 +28,7 @@ bitflags! {
 impl ConditionFlags {
     // Clear and reset Z, S, P flags per "standard" rules
     pub fn set_zsp(&mut self, result: u8) {
-        self.remove(ConditionFlags::Z & ConditionFlags::S & ConditionFlags::P);
+        self.remove(ConditionFlags::Z | ConditionFlags::S | ConditionFlags::P);
         if result == 0 {
             self.insert(ConditionFlags::Z);
         }
@@ -3718,6 +3718,26 @@ pub mod tests {
             machine_state.processor_state.flags,
             ConditionFlags::P | ConditionFlags::S
         )
+    }
+
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "x86_64", test)]
+    fn dcr_debug_issue_1() {
+        let mut machine_state = MachineState::new();
+        let mut test_rom = [0 as u8; space_invaders_rom::SPACE_INVADERS_ROM.len()];
+        test_rom[0] = 0b00_000_101 | (RegisterBitPattern::B as u8) << 3;
+        machine_state.mem_map.rom = test_rom;
+        machine_state.processor_state.reg_a = 0x00;
+        machine_state.processor_state.reg_b = 0x08;
+        machine_state.processor_state.reg_c = 0x1c;
+        machine_state.processor_state.reg_d = 0x1f;
+        machine_state.processor_state.reg_e = 0x31;
+        machine_state.processor_state.reg_h = 0x24;
+        machine_state.processor_state.reg_l = 0x3e;
+        machine_state.processor_state.flags = ConditionFlags::Z | ConditionFlags::P;
+        machine_state.iterate_processor_state();
+        assert_eq!(machine_state.processor_state.reg_b, 0x07);
+        assert_eq!(machine_state.processor_state.flags, ConditionFlags::AC)
     }
 
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
