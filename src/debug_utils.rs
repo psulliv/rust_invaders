@@ -1,12 +1,71 @@
 #![allow(unused)]
-use crate::eighty_eighty_emulator::ConditionFlags;
+
+use crate::eighty_eighty_emulator::{ConditionFlags, ProcessorState};
+use crate::machine::{MachineState, PortState};
 use lazy_static::lazy_static;
+use std::fmt::Write;
+
 use regex::Regex;
 use std::io;
 use std::io::prelude::*;
 
-use crate::{eighty_eighty_emulator::ProcessorState, machine::MachineState};
-#[allow(unused)]
+#[derive(Debug)]
+#[repr(C)]
+pub struct RefState {
+    a: u8,
+    b: u8,
+    c: u8,
+    d: u8,
+    e: u8,
+    h: u8,
+    l: u8,
+    sp: u16,
+    pc: u16,
+    memory: *mut u8,
+    cc: u8,
+    int_enable: u8,
+}
+
+impl RefState {
+    pub fn new(some_memory: *mut u8) -> Self {
+        RefState {
+            a: 0,
+            b: 0,
+            c: 0,
+            d: 0,
+            e: 0,
+            h: 0,
+            l: 0,
+            sp: 0,
+            pc: 0,
+            memory: some_memory,
+            cc: 0,
+            int_enable: 0,
+        }
+    }
+
+    pub fn compare_to_r(self: &RefState, our_imp: &ProcessorState) -> bool {
+        self.a == our_imp.reg_a
+            && self.b == our_imp.reg_b
+            && self.c == our_imp.reg_c
+            && self.d == our_imp.reg_d
+            && self.e == our_imp.reg_e
+            && self.h == our_imp.reg_h
+            && self.l == our_imp.reg_l
+            && self.sp == our_imp.stack_pointer
+            && self.pc == our_imp.prog_counter
+            && (self.int_enable == 1) == our_imp.interrupts_enabled
+    }
+
+    pub fn ints_enabled(&self) -> bool {
+        self.int_enable == 1
+    }
+}
+
+extern "C" {
+    pub fn Emulate8080Op(ref_state: &mut RefState) -> u8;
+    pub fn GenerateInterrupt(ref_state: &mut RefState, int_num: u8);
+}
 
 pub fn pause() {
     let mut stdin = io::stdin();
@@ -15,11 +74,100 @@ pub fn pause() {
 
 pub fn debug_console_print(print_this: &String) {
     if cfg!(target_arch = "wasm32") {
-        web_sys::console::log_1(&print_this.into());
+        unsafe {
+            web_sys::console::log_1(&print_this.into());
+        }
     }
     if cfg!(target_arch = "x86_64") {
         println!("{}", &print_this);
     }
+}
+
+pub fn keyboard_port_bits_printer(state: &std::sync::Arc<std::sync::Mutex<PortState>>) -> String {
+    let guard = state.lock().unwrap();
+    let mut some_string = String::new();
+    write!(
+        some_string,
+        "coin is {}, ",
+        if ((guard.read_port_1 & 0b1) == 0b0) {
+            "active"
+        } else {
+            "not active"
+        }
+    );
+    write!(
+        some_string,
+        "P2 start button {}, ",
+        if ((guard.read_port_1 & 0b10) == 0b10) {
+            "active"
+        } else {
+            "not active"
+        }
+    );
+    write!(
+        some_string,
+        "P1 start button {}, ",
+        if ((guard.read_port_1 & 0b100) == 0b100) {
+            "active"
+        } else {
+            "not active"
+        }
+    );
+    write!(
+        some_string,
+        "P1 shoot button {}, ",
+        if ((guard.read_port_1 & 0b1_0000) == 0b1_0000) {
+            "active"
+        } else {
+            "not active"
+        }
+    );
+    write!(
+        some_string,
+        "P1 left button {}, ",
+        if ((guard.read_port_1 & 0b10_0000) == 0b10_0000) {
+            "active"
+        } else {
+            "not active"
+        }
+    );
+    write!(
+        some_string,
+        "P1 right button {}, ",
+        if ((guard.read_port_1 & 0b100_0000) == 0b100_0000) {
+            "active"
+        } else {
+            "not active"
+        }
+    );
+    write!(
+        some_string,
+        "P2 shoot button {}, ",
+        if ((guard.read_port_2 & 0b1_0000) == 0b1_0000) {
+            "active"
+        } else {
+            "not active"
+        }
+    );
+    write!(
+        some_string,
+        "P2 left button {}, ",
+        if ((guard.read_port_2 & 0b10_0000) == 0b10_0000) {
+            "active"
+        } else {
+            "not active"
+        }
+    );
+    write!(
+        some_string,
+        "P2 right button {}, ",
+        if ((guard.read_port_2 & 0b100_0000) == 0b100_0000) {
+            "active"
+        } else {
+            "not active"
+        }
+    );
+    some_string
 }
 
 pub fn opcode_printer(state: &MachineState) {
@@ -48,14 +196,17 @@ pub fn opcode_printer(state: &MachineState) {
     // mnemonic, length, message
     let (opcode_mnem, _, _) =
         debug_print_op_code(state.mem_map[state.processor_state.prog_counter]);
-    print!(
+    debug_console_print(&format!(
         "{:04x} {} ",
         state.processor_state.prog_counter, opcode_mnem,
-    )
+    ))
 }
 
 pub fn processor_state_printer(state: &MachineState) {
-    print!(
+    let mut this_string = String::new();
+    write!(this_string, "{} ", state.processor_state.instr_count);
+    write!(
+        this_string,
         "{}",
         if state.processor_state.flags.contains(ConditionFlags::Z) {
             "z"
@@ -63,7 +214,8 @@ pub fn processor_state_printer(state: &MachineState) {
             "."
         }
     );
-    print!(
+    write!(
+        this_string,
         "{}",
         if state.processor_state.flags.contains(ConditionFlags::S) {
             "s"
@@ -71,7 +223,8 @@ pub fn processor_state_printer(state: &MachineState) {
             "."
         }
     );
-    print!(
+    write!(
+        this_string,
         "{}",
         if state.processor_state.flags.contains(ConditionFlags::P) {
             "p"
@@ -79,7 +232,8 @@ pub fn processor_state_printer(state: &MachineState) {
             "."
         }
     );
-    print!(
+    write!(
+        this_string,
         "{}",
         if state.processor_state.flags.contains(ConditionFlags::CY) {
             "c"
@@ -87,7 +241,8 @@ pub fn processor_state_printer(state: &MachineState) {
             "."
         }
     );
-    print!(
+    write!(
+        this_string,
         "{}",
         if state.processor_state.flags.contains(ConditionFlags::AC) {
             "a"
@@ -96,7 +251,8 @@ pub fn processor_state_printer(state: &MachineState) {
         }
     );
 
-    print!(
+    write!(
+        this_string,
         " A ${:02x} B ${:02x} C ${:02x} D ${:02x} E ${:02x} H ${:02x} L ${:02x} SP {:04x}",
         state.processor_state.reg_a,
         state.processor_state.reg_b,
@@ -107,12 +263,12 @@ pub fn processor_state_printer(state: &MachineState) {
         state.processor_state.reg_l,
         state.processor_state.stack_pointer,
     );
+    debug_console_print(&this_string);
 }
 
 pub fn debug_print_op_code(opcode: u8) -> (String, u8, String) {
     //! Print out the current opcode and return the number of bytes it uses including itself
     //! Parsed off of http://www.emulator101.com/reference/8080-by-opcode.html
-    //! Todo: This needs to be parsing out the first white space surrounded integer as the num bytes
     let opcode_message = match opcode {
         0x00 => " 	NOP	1		".to_string(),
         0x01 => " 	LXI B,D16	3		B <- byte 3, C <- byte 2".to_string(),
