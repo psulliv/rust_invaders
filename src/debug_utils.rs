@@ -1,12 +1,11 @@
 #![allow(unused)]
-use crate::eighty_eighty_emulator::ConditionFlags;
+
+use crate::eighty_eighty_emulator::{ConditionFlags, ProcessorState};
+use crate::machine::MachineState;
 use lazy_static::lazy_static;
 use regex::Regex;
 use std::io;
 use std::io::prelude::*;
-
-use crate::{eighty_eighty_emulator::ProcessorState, machine::MachineState};
-#[allow(unused)]
 
 pub fn pause() {
     let mut stdin = io::stdin();

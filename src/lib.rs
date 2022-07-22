@@ -31,12 +31,11 @@ pub fn emulation_loop(mut this_machine: MachineState) {
             // thread::sleep(time::Duration::from_millis(500));
             // Todo: This write should only happen once every 60 millis
             count += 1;
-            debug_utils::debug_console_print(&debug_utils::opcode_printer(&this_machine));
+            //debug_utils::debug_console_print(&debug_utils::opcode_printer(&this_machine));
             this_machine.iterate_processor_state();
-            debug_utils::debug_console_print(&debug_utils::processor_state_printer(&this_machine));
-            if count == 100000 {
+            //debug_utils::debug_console_print(&debug_utils::processor_state_printer(&this_machine));
+            if (count % 100000) == 0 {
                 crate::display_output::write_canvas_element(&this_machine);
-                break;
             }
         }
         #[cfg(target_arch = "x86_64")]
