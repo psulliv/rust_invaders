@@ -26,6 +26,10 @@ pub fn write_canvas_element(machine: &MachineState) {
         .unwrap()
         .dyn_into::<web_sys::CanvasRenderingContext2d>()
         .unwrap();
+    context.begin_path();
+    context
+        .arc(75.0, 75.0, 50.0, 0.0, core::f64::consts::PI * 2.0)
+        .unwrap();
     let mut image = context
         .create_image_data_with_sw_and_sh(224.0, 256.0)
         .unwrap();

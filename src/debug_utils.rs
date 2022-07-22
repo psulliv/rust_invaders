@@ -22,7 +22,7 @@ pub fn debug_console_print(print_this: &String) {
     }
 }
 
-pub fn opcode_printer(state: &MachineState) {
+pub fn opcode_printer(state: &MachineState) -> String {
     // 1a35 INX    D   .sp..  A $00 B $af C $00 D $1b E $52 H $20 L $52 SP 23fe
     // print the address in hex, print the instruction and source/dest, flags, registers
     // A B C D E H L SP
@@ -48,55 +48,57 @@ pub fn opcode_printer(state: &MachineState) {
     // mnemonic, length, message
     let (opcode_mnem, _, _) =
         debug_print_op_code(state.mem_map[state.processor_state.prog_counter]);
-    print!(
+    format!(
         "{:04x} {} ",
         state.processor_state.prog_counter, opcode_mnem,
     )
 }
 
-pub fn processor_state_printer(state: &MachineState) {
-    print!(
+pub fn processor_state_printer(state: &MachineState) -> String {
+    let mut this_string = String::new();
+
+    this_string.push_str(&format!(
         "{}",
         if state.processor_state.flags.contains(ConditionFlags::Z) {
             "z"
         } else {
             "."
         }
-    );
-    print!(
+    ));
+    this_string.push_str(&format!(
         "{}",
         if state.processor_state.flags.contains(ConditionFlags::S) {
             "s"
         } else {
             "."
         }
-    );
-    print!(
+    ));
+    this_string.push_str(&format!(
         "{}",
         if state.processor_state.flags.contains(ConditionFlags::P) {
             "p"
         } else {
             "."
         }
-    );
-    print!(
+    ));
+    this_string.push_str(&format!(
         "{}",
         if state.processor_state.flags.contains(ConditionFlags::CY) {
             "c"
         } else {
             "."
         }
-    );
-    print!(
+    ));
+    this_string.push_str(&format!(
         "{}",
         if state.processor_state.flags.contains(ConditionFlags::AC) {
             "a"
         } else {
             "."
         }
-    );
+    ));
 
-    print!(
+    this_string.push_str(&format!(
         " A ${:02x} B ${:02x} C ${:02x} D ${:02x} E ${:02x} H ${:02x} L ${:02x} SP {:04x}",
         state.processor_state.reg_a,
         state.processor_state.reg_b,
@@ -106,7 +108,8 @@ pub fn processor_state_printer(state: &MachineState) {
         state.processor_state.reg_h,
         state.processor_state.reg_l,
         state.processor_state.stack_pointer,
-    );
+    ));
+    this_string
 }
 
 pub fn debug_print_op_code(opcode: u8) -> (String, u8, String) {
