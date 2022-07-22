@@ -1,6 +1,8 @@
 //! Module to handle the html5 canvas interactions
 use crate::machine::MachineState;
 use crate::space_invaders_rom::SPACE_INVADERS_ROM;
+use bitvec::prelude::*;
+use wasm_bindgen::Clamped;
 
 #[cfg(target_arch = "wasm32")]
 pub fn write_canvas_element(machine: &MachineState) {
@@ -24,17 +26,37 @@ pub fn write_canvas_element(machine: &MachineState) {
         .unwrap()
         .dyn_into::<web_sys::CanvasRenderingContext2d>()
         .unwrap();
+    let mut image = context
+        .create_image_data_with_sw_and_sh(224.0, 256.0)
+        .unwrap();
 
-    // kind of dirty way to access the video memory, there should
-    // be an abstraction for this.
-    // The machine struct should be a decent place to store a method that gets
-    // the video memory. Since we are just reading it maybe we don't need a lock?
-    // let video_ram = &machine.mem_map.rw_mem
-    //     [(SPACE_INVADERS_ROM.len() - 0x2400)..(SPACE_INVADERS_ROM.len() - 0x3FFF)];
-    // for (idx, &some_byte) in video_ram.iter().enumerate() {
+    let mut image_data = image.data();
 
-    // Split the byte into bits for writing
-    // }
+    // ROM up until 0x2000
+    let initial_video_mem_idx = 0x2400 - 0x2000;
+    // 7k video ram 0x2400 - 0x3FFF
+    let end_video_ram = initial_video_mem_idx + (0x4000 - 0x2400);
+    let vid_bits = BitVec::<Lsb0, u8>::from_slice(
+        &machine.mem_map.rw_mem[initial_video_mem_idx..end_video_ram],
+    )
+    .unwrap();
+
+    for (idx, bval) in vid_bits.iter().enumerate() {
+        if *bval {
+            image_data[idx * 4 + 0] = 128;
+            image_data[idx * 4 + 3] = 128;
+            image_data[idx * 4 + 1] = 128;
+            image_data[idx * 4 + 2] = 128;
+        } else {
+            image_data[idx * 4 + 0] = 64;
+            image_data[idx * 4 + 3] = 255;
+            image_data[idx * 4 + 1] = 64;
+            image_data[idx * 4 + 2] = 64;
+        }
+    }
+    context.put_image_data(&image, 0.0, 0.0);
+    context.draw_image_with_html_canvas_element(&canvas, 0.0, 0.0);
+    context.stroke();
 }
 #[cfg(target_arch = "x86_64")]
 pub fn write_console_term(machine: &MachineState) {
@@ -43,7 +65,7 @@ pub fn write_console_term(machine: &MachineState) {
     let mut counter = 0;
     for &some_byte in machine.mem_map.rw_mem[initial_video_mem_idx..end_video_ram].iter() {
         print!("{:#010b} ", some_byte);
-        if counter == 63 {
+        if counter == 64 {
             println!();
             counter = 0;
         }
