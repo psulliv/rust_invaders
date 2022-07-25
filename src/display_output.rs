@@ -4,12 +4,10 @@ use crate::space_invaders_rom::SPACE_INVADERS_ROM;
 use bitvec::prelude::*;
 use std::iter::Chain;
 use wasm_bindgen::{prelude::*, Clamped, JsCast};
+use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageData};
 
 #[cfg(target_arch = "wasm32")]
 pub fn write_canvas_element(machine: &MachineState) {
-    use wasm_bindgen::JsCast;
-    use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageData};
-
     use crate::debug_utils;
     let document = web_sys::window().unwrap().document().unwrap();
 
