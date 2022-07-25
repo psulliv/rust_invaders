@@ -23,17 +23,17 @@ fluvio-wasm-timer = "0.2.5"
 [dependencies.web-sys]
 version = "0.3.4"
 features = [
-  'console',
-  'HtmlCanvasElement',
   'CanvasRenderingContext2d',
-  'KeyboardEvent',
   'Document',
   'Element',
+  'HtmlCanvasElement',
   'HtmlElement',
   'HtmlImageElement',
   'ImageData',
+  'KeyboardEvent',
   'Node',
   'Window',
+  'console',
 
 ]
 

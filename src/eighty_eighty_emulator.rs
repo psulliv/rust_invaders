@@ -3,17 +3,19 @@
 #![allow(clippy::unusual_byte_groupings)]
 
 use crate::machine::PortState;
+#[cfg(target_arch = "wasm32")]
+use crate::space_invaders_rom;
 use crate::MachineState;
 use bitflags::bitflags;
+use fluvio_wasm_timer::{Instant, Interval};
 use std::convert::From;
 use std::mem;
 use std::sync::{Arc, Mutex};
 use std::{
     fmt::Debug,
     ops::{Index, IndexMut},
+    time::Duration,
 };
-
-use crate::space_invaders_rom;
 
 bitflags! {
     pub struct ConditionFlags: u8 {
@@ -54,6 +56,9 @@ pub struct ProcessorState {
     pub prog_counter: u16,
     pub flags: ConditionFlags,
     pub interrupts_enabled: bool,
+    pub interrupt_set: bool,
+    pub last_interrupt_time: Instant,
+    pub last_interrupt_num: u8,
 }
 
 impl ProcessorState {
@@ -72,6 +77,9 @@ impl ProcessorState {
                 bits: (0b0000_0000),
             },
             interrupts_enabled: false,
+            interrupt_set: false,
+            last_interrupt_time: Instant::now(),
+            last_interrupt_num: 1,
         }
     }
 
@@ -375,6 +383,10 @@ fn get_destination_register_bit_pattern(cur_instruction: u8) -> RegisterBitPatte
     ((cur_instruction & 0b00_111_000) >> 3).into()
 }
 
+fn generate_rst_opcode(interrupt_num: u8) -> u8 {
+    0b11_000_111 | (interrupt_num << 3)
+}
+
 impl MachineState {
     /// Match statement for operation decoding
     pub fn iterate_processor_state(&mut self) {
@@ -382,7 +394,23 @@ impl MachineState {
         let mem_map = &mut self.mem_map;
         let state = &mut self.processor_state;
         let ports = self.port_state.clone();
-        let cur_instruction = mem_map[state.prog_counter];
+        let mut cur_instruction = mem_map[state.prog_counter];
+        let mut last_int = 1;
+        if state.interrupts_enabled
+            && ((Instant::now() - state.last_interrupt_time) > Duration::new(0, 500_000_000))
+        {
+            // state.interrupts_enabled = false;
+            state.last_interrupt_time = Instant::now();
+            if state.last_interrupt_num == 1 {
+                cur_instruction = generate_rst_opcode(2);
+                state.last_interrupt_num = 2;
+            } else if state.last_interrupt_num == 2 {
+                cur_instruction = generate_rst_opcode(1);
+                state.last_interrupt_num = 1;
+            } else {
+                panic!("Invalid RST interrupt num");
+            }
+        }
 
         match cur_instruction {
             0x00 => {
@@ -396,7 +424,6 @@ impl MachineState {
             }
             0x03 => {
                 opcode_inx(state, mem_map);
-                // 1
             }
             0x04 => {
                 opcode_inr(state, mem_map);
@@ -411,15 +438,13 @@ impl MachineState {
                 opcode_rlc(state);
             }
             0x08 => {
-                panic!("    -                       ");
-                // 1
+                panic!("Bogus opcode, bailing");
             }
             0x09 => {
                 opcode_dad(state, mem_map);
             }
             0x0a => {
                 opcode_ldax(state, mem_map);
-                // 1
             }
             0x0b => {
                 opcode_dcx(state, mem_map);
@@ -437,8 +462,7 @@ impl MachineState {
                 opcode_rrc(state);
             }
             0x10 => {
-                panic!("    -                       ");
-                // 1
+                panic!("Bogus opcode, bailing");
             }
             0x11 => {
                 opcode_lxi(state, mem_map);
@@ -448,7 +472,6 @@ impl MachineState {
             }
             0x13 => {
                 opcode_inx(state, mem_map);
-                // 1
             }
             0x14 => {
                 opcode_inr(state, mem_map);
@@ -463,8 +486,7 @@ impl MachineState {
                 opcode_ral(state);
             }
             0x18 => {
-                panic!("    -                       ");
-                // 1
+                panic!("Bogus opcode, bailing");
             }
             0x19 => {
                 opcode_dad(state, mem_map);
@@ -488,8 +510,7 @@ impl MachineState {
                 opcode_rar(state);
             }
             0x20 => {
-                panic!("    -                       ");
-                // 1
+                panic!("Bogus opcode, bailing");
             }
             0x21 => {
                 opcode_lxi(state, mem_map);
@@ -499,7 +520,6 @@ impl MachineState {
             }
             0x23 => {
                 opcode_inx(state, mem_map);
-                // 1
             }
             0x24 => {
                 opcode_inr(state, mem_map);
@@ -514,8 +534,7 @@ impl MachineState {
                 opcode_daa(state);
             }
             0x28 => {
-                panic!("    -                       ");
-                // 1
+                panic!("Bogus opcode, bailing");
             }
             0x29 => {
                 opcode_dad(state, mem_map);
@@ -539,8 +558,7 @@ impl MachineState {
                 opcode_cma(state);
             }
             0x30 => {
-                panic!("    -                       ");
-                // 1
+                panic!("Bogus opcode, bailing");
             }
             0x31 => {
                 opcode_lxi(state, mem_map);
@@ -550,7 +568,6 @@ impl MachineState {
             }
             0x33 => {
                 opcode_inx(state, mem_map);
-                // 1
             }
             0x34 => {
                 opcode_inr(state, mem_map);
@@ -565,8 +582,7 @@ impl MachineState {
                 opcode_stc(state);
             }
             0x38 => {
-                panic!("    -                       ");
-                // 1
+                panic!("Bogus opcode, bailing");
             }
             0x39 => {
                 opcode_dad(state, mem_map);
@@ -591,259 +607,195 @@ impl MachineState {
             }
             0x40 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x41 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x42 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x43 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x44 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x45 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x46 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x47 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x48 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x49 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x4a => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x4b => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x4c => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x4d => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x4e => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x4f => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x50 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x51 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x52 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x53 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x54 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x55 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x56 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x57 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x58 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x59 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x5a => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x5b => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x5c => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x5d => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x5e => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x5f => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x60 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x61 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x62 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x63 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x64 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x65 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x66 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x67 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x68 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x69 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x6a => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x6b => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x6c => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x6d => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x6e => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x6f => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x70 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x71 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x72 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x73 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x74 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x75 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x76 => {
                 opcode_halt(state, mem_map);
-                // 1
             }
             0x77 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x78 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x79 => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x7a => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x7b => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x7c => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x7d => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x7e => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x7f => {
                 opcode_mov(state, mem_map);
-                // 1
             }
             0x80 => {
                 opcode_add(state, mem_map);
@@ -898,19 +850,15 @@ impl MachineState {
             }
             0x91 => {
                 opcode_sub(state, mem_map);
-                // 1
             }
             0x92 => {
                 opcode_sub(state, mem_map);
-                // 1
             }
             0x93 => {
                 opcode_sub(state, mem_map);
-                // 1
             }
             0x94 => {
                 opcode_sub(state, mem_map);
-                // 1
             }
             0x95 => {
                 opcode_sub(state, mem_map);
@@ -1049,7 +997,6 @@ impl MachineState {
             }
             0xc2 => {
                 opcode_jmp(state, mem_map);
-                // 3
             }
             0xc3 => {
                 opcode_jmp(state, mem_map);
@@ -1071,15 +1018,12 @@ impl MachineState {
             }
             0xc9 => {
                 opcode_ret(state, mem_map);
-                // 1
             }
             0xca => {
                 opcode_jmp(state, mem_map);
-                // 3
             }
             0xcb => {
-                panic!("    -                       ");
-                // 1
+                panic!("Bogus opcode, bailing");
             }
             0xcc => {
                 opcode_call(state, mem_map);
@@ -1101,11 +1045,9 @@ impl MachineState {
             }
             0xd2 => {
                 opcode_jmp(state, mem_map);
-                // 3
             }
             0xd3 => {
                 opcode_out(state, mem_map, ports);
-                // 2
             }
             0xd4 => {
                 opcode_call(state, mem_map);
@@ -1123,7 +1065,7 @@ impl MachineState {
                 opcode_ret(state, mem_map);
             }
             0xd9 => {
-                panic!(" Bogus opcode parsed, bailing ");
+                panic!("Bogus opcode, bailing");
             }
             0xda => {
                 opcode_jmp(state, mem_map);
@@ -1135,7 +1077,7 @@ impl MachineState {
                 opcode_call(state, mem_map);
             }
             0xdd => {
-                panic!(" Bogus opcode parsed, bailing ");
+                panic!("Bogus opcode, bailing");
             }
             0xde => {
                 opcode_sbi(state, mem_map);
@@ -1183,7 +1125,7 @@ impl MachineState {
                 opcode_call(state, mem_map);
             }
             0xed => {
-                panic!(" Bogus opcode parsed, bailing ");
+                panic!("Bogus opcode, bailing");
             }
             0xee => {
                 opcode_xri(state, mem_map);
@@ -1199,7 +1141,6 @@ impl MachineState {
             }
             0xf2 => {
                 opcode_jmp(state, mem_map);
-                // 3
             }
             0xf3 => {
                 opcode_di(state, mem_map);
@@ -1232,7 +1173,7 @@ impl MachineState {
                 opcode_call(state, mem_map);
             }
             0xfd => {
-                panic!(" Bogus opcode parsed, bailing");
+                panic!("Bogus opcode, bailing");
             }
             0xfe => {
                 opcode_cpi(state, mem_map);
@@ -2631,6 +2572,8 @@ fn opcode_di(state: &mut ProcessorState, _mem_map: &mut MemMap) {
 fn opcode_halt(_state: &mut ProcessorState, _mem_map: &mut MemMap) {
     std::process::exit(0);
 }
+
+// Todo: change visibility of attrs and methods to pub(crate)
 
 // Todo: See if we can convert the Arc::Mutex to an Rc::RefCell
 

@@ -80,6 +80,9 @@ use web_sys::console;
 
 #[derive(Clone, Copy)]
 pub enum Button {
+    Fire,
+    Left,
+    Right,
     P1Start,
     P2Start,
     P1Shoot,
@@ -131,6 +134,7 @@ pub struct PortState {
     ///     (write ports 3,5,6 can be left unemulated, read port 1=$01 and 2=$00
     ///     will make the game run, but but only in attract mode)
     ///```
+    pub read_port_0: u8,
     pub read_port_1: u8,
     pub read_port_2: u8,
     pub read_port_3: u8,
@@ -143,6 +147,15 @@ pub struct PortState {
 impl PortState {
     pub fn button_down(&mut self, button: Button) {
         match button {
+            Button::Left => {
+                self.read_port_0 |= 0b1 << 5;
+            }
+            Button::Right => {
+                self.read_port_0 |= 0b1 << 6;
+            }
+            Button::Fire => {
+                self.read_port_0 |= 0b1 << 4;
+            }
             Button::P1Start => {
                 self.read_port_1 |= 0b1 << 2;
             }
@@ -168,7 +181,7 @@ impl PortState {
                 self.read_port_2 |= 0b1 << 6;
             }
             Button::Coin => {
-                self.read_port_1 &= !0b1;
+                self.read_port_1 |= 0b1;
             }
             Button::NumLivesSwitch0 => {
                 self.read_port_2 &= 0b1;
@@ -189,6 +202,15 @@ impl PortState {
     }
     pub fn button_up(&mut self, button: Button) {
         match button {
+            Button::Left => {
+                self.read_port_0 &= !(0b1 << 5);
+            }
+            Button::Right => {
+                self.read_port_0 &= !(0b1 << 6);
+            }
+            Button::Fire => {
+                self.read_port_0 &= !(0b1 << 4);
+            }
             Button::P1Start => {
                 self.read_port_1 &= !(0b1 << 2);
             }
@@ -214,7 +236,8 @@ impl PortState {
                 self.read_port_2 &= !(0b1 << 6);
             }
             Button::Coin => {
-                self.read_port_1 |= 0b1;
+                // leave the coin
+                // self.read_port_1 |= 0b1;
             }
             Button::NumLivesSwitch0 => {
                 self.read_port_2 &= !(0b1);
@@ -245,8 +268,9 @@ impl MachineState {
     pub fn new() -> Self {
         MachineState {
             port_state: Arc::new(Mutex::new(PortState {
-                read_port_1: 0b0000_0001,
-                read_port_2: 0b0000_0000,
+                read_port_0: 0b0000_1110,
+                read_port_1: 0b0000_0000,
+                read_port_2: 0b1000_0000,
                 read_port_3: 0b0000_0000,
                 write_port_1: 0b0000_0000,
                 write_port_2: 0b0000_0000,
@@ -267,6 +291,8 @@ impl Default for MachineState {
 
 fn map_keyboard_to_button(key: &str) -> Option<Button> {
     match key {
+        "KeyZ" => Some(Button::Left),
+        "KeyX" => Some(Button::Right),
         "KeyA" => Some(Button::P1Left),
         "KeyD" => Some(Button::P1Right),
         "ArrowLeft" => Some(Button::P2Left),
@@ -287,7 +313,7 @@ pub fn start_keyboard_listeners(m: &MachineState) {
         if let Some(button) = map_keyboard_to_button(&(event.code())) {
             let mut l_portstate = down_m.lock().unwrap();
             l_portstate.button_down(button);
-            console::log_1(&format!("Keydown: state is {:#?}", l_portstate).into());
+            unsafe { console::log_1(&format!("Keydown: state is {:#?}", l_portstate).into()) };
         }
     }) as Box<dyn FnMut(_)>);
     window
@@ -300,7 +326,7 @@ pub fn start_keyboard_listeners(m: &MachineState) {
         if let Some(button) = map_keyboard_to_button(&(event.code())) {
             let mut l_portstate = up_m.lock().unwrap();
             l_portstate.button_up(button);
-            console::log_1(&format!("Keyup: state is {:#?}", l_portstate).into());
+            unsafe { console::log_1(&format!("Keyup: state is {:#?}", l_portstate).into()) };
         }
     }) as Box<dyn FnMut(_)>);
     window

@@ -23,9 +23,9 @@ pub async fn js_entry_point() -> Result<(), JsValue> {
     console_error_panic_hook::set_once();
     let machine = machine::MachineState::new();
     start_keyboard_listeners(&machine);
-    spawn_local(async move { emulation_loop(machine).await });
-    loop {
-        Delay::new(Duration::new(1, 0));
+    emulation_loop(machine).await;
+    unsafe {
+        web_sys::console::log_1(&"Shouldn't print".into());
     }
     Ok(())
 }
@@ -35,15 +35,13 @@ pub async fn emulation_loop(mut this_machine: MachineState) {
     loop {
         #[cfg(target_arch = "wasm32")]
         {
-            // thread::sleep(time::Duration::from_millis(500));
-            // Todo: This write should only happen once every 60 millis
-            //debug_utils::debug_console_print(&debug_utils::opcode_printer(&this_machine));
+            debug_utils::debug_console_print(&debug_utils::opcode_printer(&this_machine));
             for _ in 0..100000 {
                 this_machine.iterate_processor_state();
             }
 
-            //debug_utils::debug_console_print(&debug_utils::processor_state_printer(&this_machine));
-            Delay::new(Duration::new(1, 0)).await;
+            debug_utils::debug_console_print(&debug_utils::processor_state_printer(&this_machine));
+            Delay::new(Duration::new(0, 100_000_000)).await;
             crate::display_output::write_canvas_element(&this_machine);
         }
         #[cfg(target_arch = "x86_64")]
