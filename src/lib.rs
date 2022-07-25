@@ -5,7 +5,7 @@ mod eighty_eighty_emulator;
 pub mod machine;
 mod space_invaders_rom;
 use eighty_eighty_emulator::{MemMap, ProcessorState};
-use fluvio_wasm_timer::Delay;
+use fluvio_wasm_timer::{Delay, Instant};
 use machine::{start_keyboard_listeners, MachineState};
 use std::io;
 use std::io::prelude::*;
@@ -32,17 +32,21 @@ pub async fn js_entry_point() -> Result<(), JsValue> {
 
 pub async fn emulation_loop(mut this_machine: MachineState) {
     let mut count = 0;
+    let mut last_display = Instant::now();
     loop {
         #[cfg(target_arch = "wasm32")]
         {
-            debug_utils::debug_console_print(&debug_utils::opcode_printer(&this_machine));
+            //debug_utils::debug_console_print(&debug_utils::opcode_printer(&this_machine));
             for _ in 0..100000 {
                 this_machine.iterate_processor_state();
             }
 
-            debug_utils::debug_console_print(&debug_utils::processor_state_printer(&this_machine));
-            Delay::new(Duration::new(0, 100_000_000)).await;
+            //debug_utils::debug_console_print(&debug_utils::processor_state_printer(&this_machine));
+            Delay::new(Duration::new(0, 16_000_000)).await;
             crate::display_output::write_canvas_element(&this_machine);
+
+            //debug_utils::debug_console_print(&debug_utils::opcode_printer(&this_machine));
+            //debug_utils::debug_console_print(&debug_utils::processor_state_printer(&this_machine));
         }
         #[cfg(target_arch = "x86_64")]
         {

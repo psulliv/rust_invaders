@@ -7,7 +7,7 @@ use crate::machine::PortState;
 use crate::space_invaders_rom;
 use crate::MachineState;
 use bitflags::bitflags;
-use fluvio_wasm_timer::{Instant, Interval};
+use fluvio_wasm_timer::{Delay, Instant, Interval};
 use std::convert::From;
 use std::mem;
 use std::sync::{Arc, Mutex};
@@ -383,10 +383,6 @@ fn get_destination_register_bit_pattern(cur_instruction: u8) -> RegisterBitPatte
     ((cur_instruction & 0b00_111_000) >> 3).into()
 }
 
-fn generate_rst_opcode(interrupt_num: u8) -> u8 {
-    0b11_000_111 | (interrupt_num << 3)
-}
-
 impl MachineState {
     /// Match statement for operation decoding
     pub fn iterate_processor_state(&mut self) {
@@ -395,18 +391,19 @@ impl MachineState {
         let state = &mut self.processor_state;
         let ports = self.port_state.clone();
         let mut cur_instruction = mem_map[state.prog_counter];
-        let mut last_int = 1;
         if state.interrupts_enabled
-            && ((Instant::now() - state.last_interrupt_time) > Duration::new(0, 500_000_000))
+            && ((Instant::now() - state.last_interrupt_time) > Duration::new(0, 100_000_000))
         {
             // state.interrupts_enabled = false;
             state.last_interrupt_time = Instant::now();
             if state.last_interrupt_num == 1 {
-                cur_instruction = generate_rst_opcode(2);
+                opcode_rst(state, mem_map, 2);
                 state.last_interrupt_num = 2;
+                return;
             } else if state.last_interrupt_num == 2 {
-                cur_instruction = generate_rst_opcode(1);
+                opcode_rst(state, mem_map, 1);
                 state.last_interrupt_num = 1;
+                return;
             } else {
                 panic!("Invalid RST interrupt num");
             }
@@ -510,7 +507,7 @@ impl MachineState {
                 opcode_rar(state);
             }
             0x20 => {
-                panic!("Bogus opcode, bailing");
+                panic!("Bogus opcode, bailing: {}", cur_instruction);
             }
             0x21 => {
                 opcode_lxi(state, mem_map);
@@ -1011,7 +1008,7 @@ impl MachineState {
                 opcode_adi(state, mem_map);
             }
             0xc7 => {
-                opcode_rst(state, mem_map);
+                panic!("interrupt vectors emulated at start of iterate_state");
             }
             0xc8 => {
                 opcode_ret(state, mem_map);
@@ -1035,7 +1032,7 @@ impl MachineState {
                 opcode_aci(state, mem_map);
             }
             0xcf => {
-                opcode_rst(state, mem_map);
+                panic!("interrupt vectors emulated at start of iterate_state");
             }
             0xd0 => {
                 opcode_ret(state, mem_map);
@@ -1059,7 +1056,7 @@ impl MachineState {
                 opcode_sui(state, mem_map);
             }
             0xd7 => {
-                opcode_rst(state, mem_map);
+                panic!("interrupt vectors emulated at start of iterate_state");
             }
             0xd8 => {
                 opcode_ret(state, mem_map);
@@ -1071,6 +1068,11 @@ impl MachineState {
                 opcode_jmp(state, mem_map);
             }
             0xdb => {
+                // unsafe {
+                //     web_sys::console::log_1(
+                //         &format!("reading opcode_in {:0b}", cur_instruction).into(),
+                //     )
+                // };
                 opcode_in(state, mem_map, ports);
             }
             0xdc => {
@@ -1083,7 +1085,7 @@ impl MachineState {
                 opcode_sbi(state, mem_map);
             }
             0xdf => {
-                opcode_rst(state, mem_map);
+                panic!("interrupt vectors emulated at start of iterate_state");
             }
             0xe0 => {
                 opcode_ret(state, mem_map);
@@ -1107,7 +1109,7 @@ impl MachineState {
                 opcode_ani(state, mem_map);
             }
             0xe7 => {
-                opcode_rst(state, mem_map);
+                panic!("interrupt vectors emulated at start of iterate_state");
             }
             0xe8 => {
                 opcode_ret(state, mem_map);
@@ -1131,7 +1133,7 @@ impl MachineState {
                 opcode_xri(state, mem_map);
             }
             0xef => {
-                opcode_rst(state, mem_map);
+                panic!("interrupt vectors emulated at start of iterate_state");
             }
             0xf0 => {
                 opcode_ret(state, mem_map);
@@ -1155,7 +1157,7 @@ impl MachineState {
                 opcode_ori(state, mem_map);
             }
             0xf7 => {
-                opcode_rst(state, mem_map);
+                panic!("interrupt vectors emulated at start of iterate_state");
             }
             0xf8 => {
                 opcode_ret(state, mem_map);
@@ -1179,7 +1181,7 @@ impl MachineState {
                 opcode_cpi(state, mem_map);
             }
             0xff => {
-                opcode_rst(state, mem_map);
+                panic!("interrupt vectors emulated at start of iterate_state");
             }
         };
     }
@@ -2364,13 +2366,15 @@ fn opcode_ret(state: &mut ProcessorState, mem_map: &mut MemMap) {
 /// The content of register SP is decremented by two.
 /// Control is transferred to the instruction whose ad-
 /// dress is eight times the content of NNN.
-fn opcode_rst(state: &mut ProcessorState, mem_map: &mut MemMap) {
-    let cur_instruction = mem_map[state.prog_counter];
+fn opcode_rst(state: &mut ProcessorState, mem_map: &mut MemMap, int_num: u8) {
+    // unsafe {
+    //     web_sys::console::log_1(&format!("In RST handler {:10b}", cur_instruction).into());
+    // }
 
     // kind of lazy but the call address is essentially this mask on the
     // instruction, it's really NNN * 8, buts that really a 3 bit left
     // shift and it's already three bits to the left if you mask it.
-    let rst_address = (cur_instruction & 0b00_111_000) as u16;
+    let rst_address = (int_num << 3).into();
     state.push_address(mem_map, state.prog_counter);
     state.prog_counter = rst_address;
 }
@@ -2572,6 +2576,8 @@ fn opcode_di(state: &mut ProcessorState, _mem_map: &mut MemMap) {
 fn opcode_halt(_state: &mut ProcessorState, _mem_map: &mut MemMap) {
     std::process::exit(0);
 }
+
+// Todo: Fix cludgy RST handler
 
 // Todo: change visibility of attrs and methods to pub(crate)
 
