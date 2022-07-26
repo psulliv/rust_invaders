@@ -37,12 +37,12 @@ pub async fn emulation_loop(mut this_machine: MachineState) {
         #[cfg(target_arch = "wasm32")]
         {
             //debug_utils::debug_console_print(&debug_utils::opcode_printer(&this_machine));
-            for _ in 0..100000 {
+            for _ in 0..1_000_000 {
                 this_machine.iterate_processor_state();
             }
 
             //debug_utils::debug_console_print(&debug_utils::processor_state_printer(&this_machine));
-            Delay::new(Duration::new(0, 16_000_000)).await;
+            Delay::new(Duration::new(0, 1_000_000)).await;
             crate::display_output::write_canvas_element(&this_machine);
 
             //debug_utils::debug_console_print(&debug_utils::opcode_printer(&this_machine));

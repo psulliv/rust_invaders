@@ -2,10 +2,11 @@
 
 #![allow(clippy::unusual_byte_groupings)]
 
+use crate::debug_utils::{debug_print_op_code, opcode_printer};
 use crate::machine::PortState;
 #[cfg(target_arch = "wasm32")]
 use crate::space_invaders_rom;
-use crate::MachineState;
+use crate::{debug_utils, MachineState};
 use bitflags::bitflags;
 use fluvio_wasm_timer::{Delay, Instant, Interval};
 use std::convert::From;
@@ -59,6 +60,7 @@ pub struct ProcessorState {
     pub interrupt_set: bool,
     pub last_interrupt_time: Instant,
     pub last_interrupt_num: u8,
+    pub trace_me: bool,
 }
 
 impl ProcessorState {
@@ -80,6 +82,7 @@ impl ProcessorState {
             interrupt_set: false,
             last_interrupt_time: Instant::now(),
             last_interrupt_num: 1,
+            trace_me: false,
         }
     }
 
@@ -387,22 +390,29 @@ impl MachineState {
     /// Match statement for operation decoding
     pub fn iterate_processor_state(&mut self) {
         // get the next opcode at the current program counter
-        let mem_map = &mut self.mem_map;
-        let state = &mut self.processor_state;
+
         let ports = self.port_state.clone();
-        let mut cur_instruction = mem_map[state.prog_counter];
-        if state.interrupts_enabled
-            && ((Instant::now() - state.last_interrupt_time) > Duration::new(0, 100_000_000))
+        let mut cur_instruction = self.mem_map[self.processor_state.prog_counter];
+        if self.processor_state.interrupts_enabled
+            && ((Instant::now() - self.processor_state.last_interrupt_time)
+                > Duration::new(0, 16_000_000))
         {
-            // state.interrupts_enabled = false;
-            state.last_interrupt_time = Instant::now();
-            if state.last_interrupt_num == 1 {
-                opcode_rst(state, mem_map, 2);
-                state.last_interrupt_num = 2;
+            // self.processor_state.interrupts_enabled = false;
+            self.processor_state.last_interrupt_time = Instant::now();
+            if self.processor_state.last_interrupt_num == 1 {
+                if self.processor_state.trace_me {
+                    debug_utils::debug_console_print(&"RST 1".into());
+                }
+                opcode_rst(&mut self.processor_state, &mut self.mem_map, 2);
+                self.processor_state.last_interrupt_num = 2;
                 return;
-            } else if state.last_interrupt_num == 2 {
-                opcode_rst(state, mem_map, 1);
-                state.last_interrupt_num = 1;
+            } else if self.processor_state.last_interrupt_num == 2 {
+                if self.processor_state.trace_me {
+                    debug_utils::debug_console_print(&"RST 2".into());
+                }
+
+                opcode_rst(&mut self.processor_state, &mut self.mem_map, 1);
+                self.processor_state.last_interrupt_num = 1;
                 return;
             } else {
                 panic!("Invalid RST interrupt num");
@@ -411,779 +421,777 @@ impl MachineState {
 
         match cur_instruction {
             0x00 => {
-                opcode_nop(state);
+                opcode_nop(&mut self.processor_state);
             }
             0x01 => {
-                opcode_lxi(state, mem_map);
+                opcode_lxi(&mut self.processor_state, &mut self.mem_map);
             }
             0x02 => {
-                opcode_stax(state, mem_map);
+                opcode_stax(&mut self.processor_state, &mut self.mem_map);
             }
             0x03 => {
-                opcode_inx(state, mem_map);
+                opcode_inx(&mut self.processor_state, &mut self.mem_map);
             }
             0x04 => {
-                opcode_inr(state, mem_map);
+                opcode_inr(&mut self.processor_state, &mut self.mem_map);
             }
             0x05 => {
-                opcode_dcr(state, mem_map);
+                opcode_dcr(&mut self.processor_state, &mut self.mem_map);
             }
             0x06 => {
-                opcode_mvi(state, mem_map);
+                opcode_mvi(&mut self.processor_state, &mut self.mem_map);
             }
             0x07 => {
-                opcode_rlc(state);
+                opcode_rlc(&mut self.processor_state);
             }
             0x08 => {
                 panic!("Bogus opcode, bailing");
             }
             0x09 => {
-                opcode_dad(state, mem_map);
+                opcode_dad(&mut self.processor_state, &mut self.mem_map);
             }
             0x0a => {
-                opcode_ldax(state, mem_map);
+                opcode_ldax(&mut self.processor_state, &mut self.mem_map);
             }
             0x0b => {
-                opcode_dcx(state, mem_map);
+                opcode_dcx(&mut self.processor_state, &mut self.mem_map);
             }
             0x0c => {
-                opcode_inr(state, mem_map);
+                opcode_inr(&mut self.processor_state, &mut self.mem_map);
             }
             0x0d => {
-                opcode_dcr(state, mem_map);
+                opcode_dcr(&mut self.processor_state, &mut self.mem_map);
             }
             0x0e => {
-                opcode_mvi(state, mem_map);
+                opcode_mvi(&mut self.processor_state, &mut self.mem_map);
             }
             0x0f => {
-                opcode_rrc(state);
+                opcode_rrc(&mut self.processor_state);
             }
             0x10 => {
                 panic!("Bogus opcode, bailing");
             }
             0x11 => {
-                opcode_lxi(state, mem_map);
+                opcode_lxi(&mut self.processor_state, &mut self.mem_map);
             }
             0x12 => {
-                opcode_stax(state, mem_map);
+                opcode_stax(&mut self.processor_state, &mut self.mem_map);
             }
             0x13 => {
-                opcode_inx(state, mem_map);
+                opcode_inx(&mut self.processor_state, &mut self.mem_map);
             }
             0x14 => {
-                opcode_inr(state, mem_map);
+                opcode_inr(&mut self.processor_state, &mut self.mem_map);
             }
             0x15 => {
-                opcode_dcr(state, mem_map);
+                opcode_dcr(&mut self.processor_state, &mut self.mem_map);
             }
             0x16 => {
-                opcode_mvi(state, mem_map);
+                opcode_mvi(&mut self.processor_state, &mut self.mem_map);
             }
             0x17 => {
-                opcode_ral(state);
+                opcode_ral(&mut self.processor_state);
             }
             0x18 => {
                 panic!("Bogus opcode, bailing");
             }
             0x19 => {
-                opcode_dad(state, mem_map);
+                opcode_dad(&mut self.processor_state, &mut self.mem_map);
             }
             0x1a => {
-                opcode_ldax(state, mem_map);
+                opcode_ldax(&mut self.processor_state, &mut self.mem_map);
             }
             0x1b => {
-                opcode_dcx(state, mem_map);
+                opcode_dcx(&mut self.processor_state, &mut self.mem_map);
             }
             0x1c => {
-                opcode_inr(state, mem_map);
+                opcode_inr(&mut self.processor_state, &mut self.mem_map);
             }
             0x1d => {
-                opcode_dcr(state, mem_map);
+                opcode_dcr(&mut self.processor_state, &mut self.mem_map);
             }
             0x1e => {
-                opcode_mvi(state, mem_map);
+                opcode_mvi(&mut self.processor_state, &mut self.mem_map);
             }
             0x1f => {
-                opcode_rar(state);
+                opcode_rar(&mut self.processor_state);
             }
             0x20 => {
                 panic!("Bogus opcode, bailing: {}", cur_instruction);
             }
             0x21 => {
-                opcode_lxi(state, mem_map);
+                opcode_lxi(&mut self.processor_state, &mut self.mem_map);
             }
             0x22 => {
-                opcode_shld(state, mem_map);
+                opcode_shld(&mut self.processor_state, &mut self.mem_map);
             }
             0x23 => {
-                opcode_inx(state, mem_map);
+                opcode_inx(&mut self.processor_state, &mut self.mem_map);
             }
             0x24 => {
-                opcode_inr(state, mem_map);
+                opcode_inr(&mut self.processor_state, &mut self.mem_map);
             }
             0x25 => {
-                opcode_dcr(state, mem_map);
+                opcode_dcr(&mut self.processor_state, &mut self.mem_map);
             }
             0x26 => {
-                opcode_mvi(state, mem_map);
+                opcode_mvi(&mut self.processor_state, &mut self.mem_map);
             }
             0x27 => {
-                opcode_daa(state);
+                opcode_daa(&mut self.processor_state);
             }
             0x28 => {
                 panic!("Bogus opcode, bailing");
             }
             0x29 => {
-                opcode_dad(state, mem_map);
+                opcode_dad(&mut self.processor_state, &mut self.mem_map);
             }
             0x2a => {
-                opcode_lhld(state, mem_map);
+                opcode_lhld(&mut self.processor_state, &mut self.mem_map);
             }
             0x2b => {
-                opcode_dcx(state, mem_map);
+                opcode_dcx(&mut self.processor_state, &mut self.mem_map);
             }
             0x2c => {
-                opcode_inr(state, mem_map);
+                opcode_inr(&mut self.processor_state, &mut self.mem_map);
             }
             0x2d => {
-                opcode_dcr(state, mem_map);
+                opcode_dcr(&mut self.processor_state, &mut self.mem_map);
             }
             0x2e => {
-                opcode_mvi(state, mem_map);
+                opcode_mvi(&mut self.processor_state, &mut self.mem_map);
             }
             0x2f => {
-                opcode_cma(state);
+                opcode_cma(&mut self.processor_state);
             }
             0x30 => {
                 panic!("Bogus opcode, bailing");
             }
             0x31 => {
-                opcode_lxi(state, mem_map);
+                opcode_lxi(&mut self.processor_state, &mut self.mem_map);
             }
             0x32 => {
-                opcode_sta(state, mem_map);
+                opcode_sta(&mut self.processor_state, &mut self.mem_map);
             }
             0x33 => {
-                opcode_inx(state, mem_map);
+                opcode_inx(&mut self.processor_state, &mut self.mem_map);
             }
             0x34 => {
-                opcode_inr(state, mem_map);
+                opcode_inr(&mut self.processor_state, &mut self.mem_map);
             }
             0x35 => {
-                opcode_dcr(state, mem_map);
+                opcode_dcr(&mut self.processor_state, &mut self.mem_map);
             }
             0x36 => {
-                opcode_mvi(state, mem_map);
+                opcode_mvi(&mut self.processor_state, &mut self.mem_map);
             }
             0x37 => {
-                opcode_stc(state);
+                opcode_stc(&mut self.processor_state);
             }
             0x38 => {
                 panic!("Bogus opcode, bailing");
             }
             0x39 => {
-                opcode_dad(state, mem_map);
+                opcode_dad(&mut self.processor_state, &mut self.mem_map);
             }
             0x3a => {
-                opcode_lda(state, mem_map);
+                opcode_lda(&mut self.processor_state, &mut self.mem_map);
             }
             0x3b => {
-                opcode_dcx(state, mem_map);
+                opcode_dcx(&mut self.processor_state, &mut self.mem_map);
             }
             0x3c => {
-                opcode_inr(state, mem_map);
+                opcode_inr(&mut self.processor_state, &mut self.mem_map);
             }
             0x3d => {
-                opcode_dcr(state, mem_map);
+                opcode_dcr(&mut self.processor_state, &mut self.mem_map);
             }
             0x3e => {
-                opcode_mvi(state, mem_map);
+                opcode_mvi(&mut self.processor_state, &mut self.mem_map);
             }
             0x3f => {
-                opcode_cmc(state);
+                opcode_cmc(&mut self.processor_state);
             }
             0x40 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x41 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x42 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x43 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x44 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x45 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x46 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x47 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x48 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x49 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x4a => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x4b => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x4c => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x4d => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x4e => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x4f => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x50 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x51 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x52 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x53 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x54 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x55 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x56 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x57 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x58 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x59 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x5a => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x5b => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x5c => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x5d => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x5e => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x5f => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x60 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x61 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x62 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x63 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x64 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x65 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x66 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x67 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x68 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x69 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x6a => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x6b => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x6c => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x6d => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x6e => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x6f => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x70 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x71 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x72 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x73 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x74 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x75 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x76 => {
-                opcode_halt(state, mem_map);
+                opcode_halt(&mut self.processor_state, &mut self.mem_map);
             }
             0x77 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x78 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x79 => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x7a => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x7b => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x7c => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x7d => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x7e => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x7f => {
-                opcode_mov(state, mem_map);
+                opcode_mov(&mut self.processor_state, &mut self.mem_map);
             }
             0x80 => {
-                opcode_add(state, mem_map);
+                opcode_add(&mut self.processor_state, &mut self.mem_map);
             }
             0x81 => {
-                opcode_add(state, mem_map);
+                opcode_add(&mut self.processor_state, &mut self.mem_map);
             }
             0x82 => {
-                opcode_add(state, mem_map);
+                opcode_add(&mut self.processor_state, &mut self.mem_map);
             }
             0x83 => {
-                opcode_add(state, mem_map);
+                opcode_add(&mut self.processor_state, &mut self.mem_map);
             }
             0x84 => {
-                opcode_add(state, mem_map);
+                opcode_add(&mut self.processor_state, &mut self.mem_map);
             }
             0x85 => {
-                opcode_add(state, mem_map);
+                opcode_add(&mut self.processor_state, &mut self.mem_map);
             }
             0x86 => {
-                opcode_add(state, mem_map);
+                opcode_add(&mut self.processor_state, &mut self.mem_map);
             }
             0x87 => {
-                opcode_add(state, mem_map);
+                opcode_add(&mut self.processor_state, &mut self.mem_map);
             }
             0x88 => {
-                opcode_adc(state, mem_map);
+                opcode_adc(&mut self.processor_state, &mut self.mem_map);
             }
             0x89 => {
-                opcode_adc(state, mem_map);
+                opcode_adc(&mut self.processor_state, &mut self.mem_map);
             }
             0x8a => {
-                opcode_adc(state, mem_map);
+                opcode_adc(&mut self.processor_state, &mut self.mem_map);
             }
             0x8b => {
-                opcode_adc(state, mem_map);
+                opcode_adc(&mut self.processor_state, &mut self.mem_map);
             }
             0x8c => {
-                opcode_adc(state, mem_map);
+                opcode_adc(&mut self.processor_state, &mut self.mem_map);
             }
             0x8d => {
-                opcode_adc(state, mem_map);
+                opcode_adc(&mut self.processor_state, &mut self.mem_map);
             }
             0x8e => {
-                opcode_adc(state, mem_map);
+                opcode_adc(&mut self.processor_state, &mut self.mem_map);
             }
             0x8f => {
-                opcode_adc(state, mem_map);
+                opcode_adc(&mut self.processor_state, &mut self.mem_map);
             }
             0x90 => {
-                opcode_sub(state, mem_map);
+                opcode_sub(&mut self.processor_state, &mut self.mem_map);
             }
             0x91 => {
-                opcode_sub(state, mem_map);
+                opcode_sub(&mut self.processor_state, &mut self.mem_map);
             }
             0x92 => {
-                opcode_sub(state, mem_map);
+                opcode_sub(&mut self.processor_state, &mut self.mem_map);
             }
             0x93 => {
-                opcode_sub(state, mem_map);
+                opcode_sub(&mut self.processor_state, &mut self.mem_map);
             }
             0x94 => {
-                opcode_sub(state, mem_map);
+                opcode_sub(&mut self.processor_state, &mut self.mem_map);
             }
             0x95 => {
-                opcode_sub(state, mem_map);
+                opcode_sub(&mut self.processor_state, &mut self.mem_map);
             }
             0x96 => {
-                opcode_sub(state, mem_map);
+                opcode_sub(&mut self.processor_state, &mut self.mem_map);
             }
             0x97 => {
-                opcode_sub(state, mem_map);
+                opcode_sub(&mut self.processor_state, &mut self.mem_map);
             }
             0x98 => {
-                opcode_sbb(state, mem_map);
+                opcode_sbb(&mut self.processor_state, &mut self.mem_map);
             }
             0x99 => {
-                opcode_sbb(state, mem_map);
+                opcode_sbb(&mut self.processor_state, &mut self.mem_map);
             }
             0x9a => {
-                opcode_sbb(state, mem_map);
+                opcode_sbb(&mut self.processor_state, &mut self.mem_map);
             }
             0x9b => {
-                opcode_sbb(state, mem_map);
+                opcode_sbb(&mut self.processor_state, &mut self.mem_map);
             }
             0x9c => {
-                opcode_sbb(state, mem_map);
+                opcode_sbb(&mut self.processor_state, &mut self.mem_map);
             }
             0x9d => {
-                opcode_sbb(state, mem_map);
+                opcode_sbb(&mut self.processor_state, &mut self.mem_map);
             }
             0x9e => {
-                opcode_sbb(state, mem_map);
+                opcode_sbb(&mut self.processor_state, &mut self.mem_map);
             }
             0x9f => {
-                opcode_sbb(state, mem_map);
+                opcode_sbb(&mut self.processor_state, &mut self.mem_map);
             }
             0xa0 => {
-                opcode_ana(state, mem_map);
+                opcode_ana(&mut self.processor_state, &mut self.mem_map);
             }
             0xa1 => {
-                opcode_ana(state, mem_map);
+                opcode_ana(&mut self.processor_state, &mut self.mem_map);
             }
             0xa2 => {
-                opcode_ana(state, mem_map);
+                opcode_ana(&mut self.processor_state, &mut self.mem_map);
             }
             0xa3 => {
-                opcode_ana(state, mem_map);
+                opcode_ana(&mut self.processor_state, &mut self.mem_map);
             }
             0xa4 => {
-                opcode_ana(state, mem_map);
+                opcode_ana(&mut self.processor_state, &mut self.mem_map);
             }
             0xa5 => {
-                opcode_ana(state, mem_map);
+                opcode_ana(&mut self.processor_state, &mut self.mem_map);
             }
             0xa6 => {
-                opcode_ana(state, mem_map);
+                opcode_ana(&mut self.processor_state, &mut self.mem_map);
             }
             0xa7 => {
-                opcode_ana(state, mem_map);
+                opcode_ana(&mut self.processor_state, &mut self.mem_map);
             }
             0xa8 => {
-                opcode_xra(state, mem_map);
+                opcode_xra(&mut self.processor_state, &mut self.mem_map);
             }
             0xa9 => {
-                opcode_xra(state, mem_map);
+                opcode_xra(&mut self.processor_state, &mut self.mem_map);
             }
             0xaa => {
-                opcode_xra(state, mem_map);
+                opcode_xra(&mut self.processor_state, &mut self.mem_map);
             }
             0xab => {
-                opcode_xra(state, mem_map);
+                opcode_xra(&mut self.processor_state, &mut self.mem_map);
             }
             0xac => {
-                opcode_xra(state, mem_map);
+                opcode_xra(&mut self.processor_state, &mut self.mem_map);
             }
             0xad => {
-                opcode_xra(state, mem_map);
+                opcode_xra(&mut self.processor_state, &mut self.mem_map);
             }
             0xae => {
-                opcode_xra(state, mem_map);
+                opcode_xra(&mut self.processor_state, &mut self.mem_map);
             }
             0xaf => {
-                opcode_xra(state, mem_map);
+                opcode_xra(&mut self.processor_state, &mut self.mem_map);
             }
             0xb0 => {
-                opcode_ora(state, mem_map);
+                opcode_ora(&mut self.processor_state, &mut self.mem_map);
             }
             0xb1 => {
-                opcode_ora(state, mem_map);
+                opcode_ora(&mut self.processor_state, &mut self.mem_map);
             }
             0xb2 => {
-                opcode_ora(state, mem_map);
+                opcode_ora(&mut self.processor_state, &mut self.mem_map);
             }
             0xb3 => {
-                opcode_ora(state, mem_map);
+                opcode_ora(&mut self.processor_state, &mut self.mem_map);
             }
             0xb4 => {
-                opcode_ora(state, mem_map);
+                opcode_ora(&mut self.processor_state, &mut self.mem_map);
             }
             0xb5 => {
-                opcode_ora(state, mem_map);
+                opcode_ora(&mut self.processor_state, &mut self.mem_map);
             }
             0xb6 => {
-                opcode_ora(state, mem_map);
+                opcode_ora(&mut self.processor_state, &mut self.mem_map);
             }
             0xb7 => {
-                opcode_ora(state, mem_map);
+                opcode_ora(&mut self.processor_state, &mut self.mem_map);
             }
             0xb8 => {
-                opcode_cmp(state, mem_map);
+                opcode_cmp(&mut self.processor_state, &mut self.mem_map);
             }
             0xb9 => {
-                opcode_cmp(state, mem_map);
+                opcode_cmp(&mut self.processor_state, &mut self.mem_map);
             }
             0xba => {
-                opcode_cmp(state, mem_map);
+                opcode_cmp(&mut self.processor_state, &mut self.mem_map);
             }
             0xbb => {
-                opcode_cmp(state, mem_map);
+                opcode_cmp(&mut self.processor_state, &mut self.mem_map);
             }
             0xbc => {
-                opcode_cmp(state, mem_map);
+                opcode_cmp(&mut self.processor_state, &mut self.mem_map);
             }
             0xbd => {
-                opcode_cmp(state, mem_map);
+                opcode_cmp(&mut self.processor_state, &mut self.mem_map);
             }
             0xbe => {
-                opcode_cmp(state, mem_map);
+                opcode_cmp(&mut self.processor_state, &mut self.mem_map);
             }
             0xbf => {
-                opcode_cmp(state, mem_map);
+                opcode_cmp(&mut self.processor_state, &mut self.mem_map);
             }
             0xc0 => {
-                opcode_ret(state, mem_map);
+                opcode_ret(&mut self.processor_state, &mut self.mem_map);
             }
             0xc1 => {
-                opcode_pop(state, mem_map);
+                opcode_pop(&mut self.processor_state, &mut self.mem_map);
             }
             0xc2 => {
-                opcode_jmp(state, mem_map);
+                opcode_jmp(&mut self.processor_state, &mut self.mem_map);
             }
             0xc3 => {
-                opcode_jmp(state, mem_map);
+                opcode_jmp(&mut self.processor_state, &mut self.mem_map);
             }
             0xc4 => {
-                opcode_call(state, mem_map);
+                opcode_call(&mut self.processor_state, &mut self.mem_map);
             }
             0xc5 => {
-                opcode_push(state, mem_map);
+                opcode_push(&mut self.processor_state, &mut self.mem_map);
             }
             0xc6 => {
-                opcode_adi(state, mem_map);
+                opcode_adi(&mut self.processor_state, &mut self.mem_map);
             }
             0xc7 => {
                 panic!("interrupt vectors emulated at start of iterate_state");
             }
             0xc8 => {
-                opcode_ret(state, mem_map);
+                opcode_ret(&mut self.processor_state, &mut self.mem_map);
             }
             0xc9 => {
-                opcode_ret(state, mem_map);
+                opcode_ret(&mut self.processor_state, &mut self.mem_map);
             }
             0xca => {
-                opcode_jmp(state, mem_map);
+                opcode_jmp(&mut self.processor_state, &mut self.mem_map);
             }
             0xcb => {
                 panic!("Bogus opcode, bailing");
             }
             0xcc => {
-                opcode_call(state, mem_map);
+                opcode_call(&mut self.processor_state, &mut self.mem_map);
             }
             0xcd => {
-                opcode_call(state, mem_map);
+                opcode_call(&mut self.processor_state, &mut self.mem_map);
             }
             0xce => {
-                opcode_aci(state, mem_map);
+                opcode_aci(&mut self.processor_state, &mut self.mem_map);
             }
             0xcf => {
                 panic!("interrupt vectors emulated at start of iterate_state");
             }
             0xd0 => {
-                opcode_ret(state, mem_map);
+                opcode_ret(&mut self.processor_state, &mut self.mem_map);
             }
             0xd1 => {
-                opcode_pop(state, mem_map);
+                opcode_pop(&mut self.processor_state, &mut self.mem_map);
             }
             0xd2 => {
-                opcode_jmp(state, mem_map);
+                opcode_jmp(&mut self.processor_state, &mut self.mem_map);
             }
             0xd3 => {
-                opcode_out(state, mem_map, ports);
+                opcode_out(&mut self.processor_state, &mut self.mem_map, ports);
             }
             0xd4 => {
-                opcode_call(state, mem_map);
+                opcode_call(&mut self.processor_state, &mut self.mem_map);
             }
             0xd5 => {
-                opcode_push(state, mem_map);
+                opcode_push(&mut self.processor_state, &mut self.mem_map);
             }
             0xd6 => {
-                opcode_sui(state, mem_map);
+                opcode_sui(&mut self.processor_state, &mut self.mem_map);
             }
             0xd7 => {
                 panic!("interrupt vectors emulated at start of iterate_state");
             }
             0xd8 => {
-                opcode_ret(state, mem_map);
+                opcode_ret(&mut self.processor_state, &mut self.mem_map);
             }
             0xd9 => {
                 panic!("Bogus opcode, bailing");
             }
             0xda => {
-                opcode_jmp(state, mem_map);
+                opcode_jmp(&mut self.processor_state, &mut self.mem_map);
             }
             0xdb => {
-                // unsafe {
-                //     web_sys::console::log_1(
-                //         &format!("reading opcode_in {:0b}", cur_instruction).into(),
-                //     )
-                // };
-                opcode_in(state, mem_map, ports);
+                opcode_in(&mut self.processor_state, &mut self.mem_map, ports);
             }
             0xdc => {
-                opcode_call(state, mem_map);
+                opcode_call(&mut self.processor_state, &mut self.mem_map);
             }
             0xdd => {
                 panic!("Bogus opcode, bailing");
             }
             0xde => {
-                opcode_sbi(state, mem_map);
+                opcode_sbi(&mut self.processor_state, &mut self.mem_map);
             }
             0xdf => {
                 panic!("interrupt vectors emulated at start of iterate_state");
             }
             0xe0 => {
-                opcode_ret(state, mem_map);
+                opcode_ret(&mut self.processor_state, &mut self.mem_map);
             }
             0xe1 => {
-                opcode_pop(state, mem_map);
+                opcode_pop(&mut self.processor_state, &mut self.mem_map);
             }
             0xe2 => {
-                opcode_jmp(state, mem_map);
+                opcode_jmp(&mut self.processor_state, &mut self.mem_map);
             }
             0xe3 => {
-                opcode_xthl(state, mem_map);
+                opcode_xthl(&mut self.processor_state, &mut self.mem_map);
             }
             0xe4 => {
-                opcode_call(state, mem_map);
+                opcode_call(&mut self.processor_state, &mut self.mem_map);
             }
             0xe5 => {
-                opcode_push(state, mem_map);
+                opcode_push(&mut self.processor_state, &mut self.mem_map);
             }
             0xe6 => {
-                opcode_ani(state, mem_map);
+                opcode_ani(&mut self.processor_state, &mut self.mem_map);
             }
             0xe7 => {
                 panic!("interrupt vectors emulated at start of iterate_state");
             }
             0xe8 => {
-                opcode_ret(state, mem_map);
+                opcode_ret(&mut self.processor_state, &mut self.mem_map);
             }
             0xe9 => {
-                opcode_pchl(state, mem_map);
+                opcode_pchl(&mut self.processor_state, &mut self.mem_map);
             }
             0xea => {
-                opcode_jmp(state, mem_map);
+                opcode_jmp(&mut self.processor_state, &mut self.mem_map);
             }
             0xeb => {
-                opcode_xchg(state, mem_map);
+                opcode_xchg(&mut self.processor_state, &mut self.mem_map);
             }
             0xec => {
-                opcode_call(state, mem_map);
+                opcode_call(&mut self.processor_state, &mut self.mem_map);
             }
             0xed => {
                 panic!("Bogus opcode, bailing");
             }
             0xee => {
-                opcode_xri(state, mem_map);
+                opcode_xri(&mut self.processor_state, &mut self.mem_map);
             }
             0xef => {
                 panic!("interrupt vectors emulated at start of iterate_state");
             }
             0xf0 => {
-                opcode_ret(state, mem_map);
+                opcode_ret(&mut self.processor_state, &mut self.mem_map);
             }
             0xf1 => {
-                opcode_pop(state, mem_map);
+                opcode_pop(&mut self.processor_state, &mut self.mem_map);
             }
             0xf2 => {
-                opcode_jmp(state, mem_map);
+                opcode_jmp(&mut self.processor_state, &mut self.mem_map);
             }
             0xf3 => {
-                opcode_di(state, mem_map);
+                opcode_di(&mut self.processor_state, &mut self.mem_map);
             }
             0xf4 => {
-                opcode_call(state, mem_map);
+                opcode_call(&mut self.processor_state, &mut self.mem_map);
             }
             0xf5 => {
-                opcode_push(state, mem_map);
+                opcode_push(&mut self.processor_state, &mut self.mem_map);
             }
             0xf6 => {
-                opcode_ori(state, mem_map);
+                opcode_ori(&mut self.processor_state, &mut self.mem_map);
             }
             0xf7 => {
                 panic!("interrupt vectors emulated at start of iterate_state");
             }
             0xf8 => {
-                opcode_ret(state, mem_map);
+                opcode_ret(&mut self.processor_state, &mut self.mem_map);
             }
             0xf9 => {
-                opcode_sphl(state, mem_map);
+                opcode_sphl(&mut self.processor_state, &mut self.mem_map);
             }
             0xfa => {
-                opcode_jmp(state, mem_map);
+                opcode_jmp(&mut self.processor_state, &mut self.mem_map);
             }
             0xfb => {
-                opcode_ei(state, mem_map);
+                opcode_ei(&mut self.processor_state, &mut self.mem_map);
             }
             0xfc => {
-                opcode_call(state, mem_map);
+                opcode_call(&mut self.processor_state, &mut self.mem_map);
             }
             0xfd => {
                 panic!("Bogus opcode, bailing");
             }
             0xfe => {
-                opcode_cpi(state, mem_map);
+                opcode_cpi(&mut self.processor_state, &mut self.mem_map);
             }
             0xff => {
                 panic!("interrupt vectors emulated at start of iterate_state");
             }
         };
+        if self.processor_state.trace_me {
+            debug_utils::processor_state_printer(&self);
+        }
     }
 }
 
@@ -2502,6 +2510,7 @@ fn opcode_sphl(state: &mut ProcessorState, _mem_map: &mut MemMap) {
 fn opcode_in(state: &mut ProcessorState, mem_map: &mut MemMap, ports: Arc<Mutex<PortState>>) {
     let port_state = ports.lock().unwrap();
     let second_byte = mem_map[state.prog_counter + 1];
+
     match second_byte {
         0x01 => {
             state.reg_a = port_state.read_port_1;

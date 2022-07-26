@@ -14,7 +14,9 @@ pub fn pause() {
 
 pub fn debug_console_print(print_this: &String) {
     if cfg!(target_arch = "wasm32") {
-        web_sys::console::log_1(&print_this.into());
+        unsafe {
+            web_sys::console::log_1(&print_this.into());
+        }
     }
     if cfg!(target_arch = "x86_64") {
         println!("{}", &print_this);
