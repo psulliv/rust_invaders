@@ -2,12 +2,61 @@
 <html>
   <head>
     <meta content="text/html;charset=utf-8" http-equiv="Content-Type"/>
+    <link rel="stylesheet" href="style.css">
+    <title>Space Invaders</title>
   </head>
   <body>
     <script type="module">
       import init from './pkg/invaders.js';
       init();
     </script>
-    <canvas id="canvas" height="256" width="224"></canvas>
+    <div id="container">
+      <canvas id="canvas" height="256" width="224"></canvas>
+      <div id="instructions">
+        <h1>Instructions</h1>
+        <ul id="instruction_list">
+          <li id="list_headers">
+            <div class="description">Action</div>
+            <div class="kbd_key">Key</div>
+          </li>
+          <li class="key_description">
+            <div class="description">Insert Coin</div>
+            <div class="kbd_key">C</div>
+          </li>
+          <li class="key_description">
+            <div class="description">P1 Start</div>
+            <div class="kbd_key">1</div>
+          </li>
+          <li class="key_description">
+            <div class="description">P1 Left</div>
+            <div class="kbd_key">A</div>
+          </li>
+          <li class="key_description">
+            <div class="description">P1 Right</div>
+            <div class="kbd_key">D</div>
+          </li>
+          <li class="key_description">
+            <div class="description">P1 Shoot</div>
+            <div class="kbd_key">Enter</div>
+          </li>
+          <li class="key_description">
+            <div class="description">P2 Start</div>
+            <div class="kbd_key">2</div>
+          </li>
+          <li class="key_description">
+            <div class="description">P2 Left</div>
+            <div class="kbd_key">Left Arrow</div>
+          </li>
+          <li class="key_description">
+            <div class="description">P2 Right</div>
+            <div class="kbd_key">Right Arrow</div>
+          </li>
+          <li class="key_description">
+            <div class="description">P2 Shoot</div>
+            <div class="kbd_key">Space</div>
+          </li>
+        </ul>
+      </div>
+    </div>
   </body>
 </html>

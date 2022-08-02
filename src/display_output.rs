@@ -8,6 +8,8 @@ use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageData};
 
 const INITIAL_VIDEO_MEM_IDX: usize = 0x2400 - 0x2000;
 const END_VIDEO_RAM: usize = INITIAL_VIDEO_MEM_IDX + (0x4000 - 0x2400);
+const DISPLAY_WIDTH: usize = 224;
+const DISPLAY_HEIGHT: usize = 256;
 
 #[cfg(target_arch = "wasm32")]
 pub fn write_canvas_element(machine: &MachineState) {
@@ -30,26 +32,36 @@ pub fn write_canvas_element(machine: &MachineState) {
         .dyn_into::<CanvasRenderingContext2d>()
         .unwrap();
 
-    let vid_bits: Vec<u8> = BitVec::<Lsb0, u8>::from_slice(
+    let mut vid_bits: [u8; 4 * DISPLAY_HEIGHT * DISPLAY_WIDTH] = [0; 4 * DISPLAY_HEIGHT * DISPLAY_WIDTH];
+    let mut mem_x = 0;
+    let mut mem_y = 0;
+    for bit in BitVec::<Lsb0, u8>::from_slice(
         &machine.mem_map.rw_mem[INITIAL_VIDEO_MEM_IDX..END_VIDEO_RAM],
     )
     .unwrap()
-    .iter()
-    .map(|bref| {
-        if *bref {
-            [0x00, 0x00, 0x00, 0xff]
-        } else {
-            [0x00, 0x00, 0x00, 0x00]
+    {
+        if bit {
+            let im_x = mem_y;
+            let im_y = DISPLAY_HEIGHT - mem_x;
+            vid_bits[4 * (im_y * DISPLAY_WIDTH + im_x) + 3] = 0xff;     // Only set alpha
         }
-    })
-    .flatten()
-    .collect();
+        if mem_x == DISPLAY_HEIGHT - 1
+        {
+            mem_y += 1;
+        }
+        mem_x = (mem_x + 1) % DISPLAY_HEIGHT;
+    }
 
     let clamped_vid_bits = Clamped(vid_bits.as_slice());
-    let imdata = ImageData::new_with_u8_clamped_array_and_sh(clamped_vid_bits, 256, 224).unwrap();
+    let imdata = ImageData::new_with_u8_clamped_array_and_sh(
+        clamped_vid_bits,
+        DISPLAY_WIDTH as u32,
+        DISPLAY_HEIGHT as u32,
+    )
+    .unwrap();
     context.put_image_data(&imdata, 0.0, 0.0).unwrap();
-
 }
+
 #[cfg(target_arch = "x86_64")]
 #[allow(unused)]
 pub fn write_console_term(machine: &MachineState) {
