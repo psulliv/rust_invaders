@@ -72,13 +72,19 @@
 //!     Way of out of proportion :P
 //!```
 
+use crate::debug_utils;
+use crate::eighty_eighty_emulator::ProcessorInterrupt;
 use crate::{MemMap, ProcessorState};
 use std::sync::{Arc, Mutex};
+
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsCast;
+#[cfg(target_arch = "wasm32")]
 use web_sys::console;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Button {
     P1Start,
     P2Start,
@@ -168,7 +174,7 @@ impl PortState {
                 self.read_port_2 |= 0b1 << 6;
             }
             Button::Coin => {
-                self.read_port_1 &= !0b1;
+                self.read_port_1 |= 0b1;
             }
             Button::NumLivesSwitch0 => {
                 self.read_port_2 &= 0b1;
@@ -214,7 +220,7 @@ impl PortState {
                 self.read_port_2 &= !(0b1 << 6);
             }
             Button::Coin => {
-                self.read_port_1 |= 0b1;
+                self.read_port_1 &= !0b1;
             }
             Button::NumLivesSwitch0 => {
                 self.read_port_2 &= !(0b1);
@@ -239,14 +245,15 @@ pub struct MachineState {
     pub port_state: Arc<Mutex<PortState>>,
     pub processor_state: ProcessorState,
     pub mem_map: MemMap,
+    pub last_interrupt: ProcessorInterrupt,
 }
 
 impl MachineState {
     pub fn new() -> Self {
         MachineState {
             port_state: Arc::new(Mutex::new(PortState {
-                read_port_1: 0b0000_0001,
-                read_port_2: 0b0000_0000,
+                read_port_1: 0b0000_0000,
+                read_port_2: 0b1000_0000,
                 read_port_3: 0b0000_0000,
                 write_port_1: 0b0000_0000,
                 write_port_2: 0b0000_0000,
@@ -255,6 +262,7 @@ impl MachineState {
             })),
             processor_state: ProcessorState::new(),
             mem_map: MemMap::new(),
+            last_interrupt: ProcessorInterrupt::ScanLine96,
         }
     }
 }
@@ -280,6 +288,7 @@ fn map_keyboard_to_button(key: &str) -> Option<Button> {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
 pub fn start_keyboard_listeners(m: &MachineState) {
     let window = web_sys::window().expect("no global `window` exists");
     let down_m = m.port_state.clone();
@@ -287,7 +296,6 @@ pub fn start_keyboard_listeners(m: &MachineState) {
         if let Some(button) = map_keyboard_to_button(&(event.code())) {
             let mut l_portstate = down_m.lock().unwrap();
             l_portstate.button_down(button);
-            console::log_1(&format!("Keydown: state is {:#?}", l_portstate).into());
         }
     }) as Box<dyn FnMut(_)>);
     window
@@ -300,7 +308,6 @@ pub fn start_keyboard_listeners(m: &MachineState) {
         if let Some(button) = map_keyboard_to_button(&(event.code())) {
             let mut l_portstate = up_m.lock().unwrap();
             l_portstate.button_up(button);
-            console::log_1(&format!("Keyup: state is {:#?}", l_portstate).into());
         }
     }) as Box<dyn FnMut(_)>);
     window
