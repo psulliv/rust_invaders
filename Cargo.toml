@@ -32,6 +32,7 @@ features = [
   'CanvasRenderingContext2d',
   'Document',
   'Element',
+  'HtmlAudioElement',
   'HtmlCanvasElement',
   'HtmlElement',
   'HtmlImageElement',
