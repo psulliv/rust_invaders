@@ -142,7 +142,9 @@ pub struct PortState {
     pub read_port_3: u8,
     pub write_port_1: u8,
     pub write_port_2: u8,
+    pub write_port_3: u8,
     pub write_port_4: u8,
+    pub write_port_5: u8,   
     pub shift_register: u16,
 }
 
@@ -257,7 +259,9 @@ impl MachineState {
                 read_port_3: 0b0000_0000,
                 write_port_1: 0b0000_0000,
                 write_port_2: 0b0000_0000,
+                write_port_3: 0b0000_0000,
                 write_port_4: 0b0000_0000,
+                write_port_5: 0b0000_0000,
                 shift_register: 0b0000_0000,
             })),
             processor_state: ProcessorState::new(),

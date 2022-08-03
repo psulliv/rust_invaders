@@ -6,6 +6,7 @@ use crate::{
     debug_utils,
     machine::{MachineState, PortState},
     space_invaders_rom,
+    sound,
 };
 use bitflags::bitflags;
 use std::{
@@ -2589,9 +2590,62 @@ fn opcode_out(state: &mut ProcessorState, mem_map: &mut MemMap, ports: Arc<Mutex
             port_state.write_port_4 = state.reg_a;
         }
         // Sound port
-        0x03 => {}
+        0x03 => {
+            let new_port_value = state.reg_a;
+            let old_port_value = port_state.write_port_3;
+            if new_port_value != old_port_value {
+                if (new_port_value & 0x01 != 0) && (old_port_value & 0x01 == 0)
+                {
+                    sound::set_loop("0", true);
+                    sound::play_sound("0");
+                }
+                else if (new_port_value & 0x01 == 0) && (old_port_value & 0x01 != 0)
+                {
+                    sound::set_loop("0", false);
+                }
+                if (new_port_value & 0x02) != (old_port_value & 0x02)
+                {
+                    sound::play_sound("1");
+                }
+                if (new_port_value & 0x04) != (old_port_value & 0x04)
+                {
+                    sound::play_sound("2");
+                }
+                if (new_port_value & 0x08) != (old_port_value & 0x08)
+                {
+                    sound::play_sound("3");
+                }                                
+                port_state.write_port_3 = new_port_value;
+            }
+        }
         // Sound port
-        0x05 => {}
+        0x05 => {
+            let new_port_value = state.reg_a;
+            let old_port_value = port_state.write_port_5;
+            if new_port_value != old_port_value {
+                if (new_port_value & 0x01) != (old_port_value & 0x01)
+                {
+                    sound::play_sound("4");
+                }
+                if (new_port_value & 0x0) != (old_port_value & 0x02)
+                {
+                    sound::play_sound("5");
+                }
+                if (new_port_value & 0x04) != (old_port_value & 0x04)
+                {
+                    sound::play_sound("6");
+                }
+                if (new_port_value & 0x08) != (old_port_value & 0x08)
+                {
+                    sound::play_sound("7");
+                }
+                if (new_port_value & 0x10) != (old_port_value & 0x10)
+                {
+                    sound::play_sound("8");
+                }
+                port_state.write_port_5 = new_port_value;
+            }
+        }
         // Todo: watchdog, do we even care to emulate this?
         0x06 => {}
         _ => {
