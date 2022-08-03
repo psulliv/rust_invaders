@@ -25,18 +25,13 @@ pub async fn js_entry_point() -> Result<(), JsValue> {
 
 #[cfg(target_arch = "wasm32")]
 pub async fn emulation_loop(mut this_machine: MachineState) {
-    let mut count_ints = 0;
     loop {
         {
             this_machine.iterate_processor_state();
             if this_machine.interrupt_due() {
-                if count_ints > 20 {
-                    count_ints = 0;
-                    crate::display_output::write_canvas_element(&this_machine);
-                    Delay::new(Duration::new(0, 50_000)).await.unwrap();
-                }
+                crate::display_output::write_canvas_element(&this_machine);
+                Delay::new(Duration::new(0, 1_000)).await.unwrap();
                 this_machine.do_next_interrupt();
-                count_ints += 1;
             }
         }
     }

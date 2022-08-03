@@ -2069,7 +2069,7 @@ fn opcode_daa(state: &mut ProcessorState) {
         }
     }
     if carry_set || high > 0b1001 || (high == 0b1001 && low > 0b1001) {
-        correction += 0b0110;
+        correction += 0b0110_0000;
         state.flags |= ConditionFlags::CY;
     }
     state.reg_a = state.reg_a.wrapping_add(correction);
