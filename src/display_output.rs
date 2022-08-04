@@ -32,7 +32,8 @@ pub fn write_canvas_element(machine: &MachineState) {
         .dyn_into::<CanvasRenderingContext2d>()
         .unwrap();
 
-    let mut vid_bits: [u8; 4 * DISPLAY_HEIGHT * DISPLAY_WIDTH] = [0; 4 * DISPLAY_HEIGHT * DISPLAY_WIDTH];
+    let mut vid_bits: [u8; 4 * DISPLAY_HEIGHT * DISPLAY_WIDTH] =
+        [0; 4 * DISPLAY_HEIGHT * DISPLAY_WIDTH];
     let mut mem_x = 0;
     let mut mem_y = 0;
     for bit in BitVec::<Lsb0, u8>::from_slice(
@@ -40,13 +41,34 @@ pub fn write_canvas_element(machine: &MachineState) {
     )
     .unwrap()
     {
+        let im_x = mem_y;
+        let im_y = (DISPLAY_HEIGHT - 1) - mem_x;
         if bit {
-            let im_x = mem_y;
-            let im_y = DISPLAY_HEIGHT - mem_x;
-            vid_bits[4 * (im_y * DISPLAY_WIDTH + im_x) + 3] = 0xff;     // Only set alpha
+            if ((im_y > 180) && (im_y < 240)) || ((im_y >= 240) && (im_x > 20 && im_x < 60)) {
+                // Green
+                vid_bits[4 * (im_y * DISPLAY_WIDTH + im_x) + 0] = 0x62;
+                vid_bits[4 * (im_y * DISPLAY_WIDTH + im_x) + 1] = 0xde;
+                vid_bits[4 * (im_y * DISPLAY_WIDTH + im_x) + 2] = 0x6d;
+                vid_bits[4 * (im_y * DISPLAY_WIDTH + im_x) + 3] = 0xff;
+            } else if im_y < 50 && im_y > 33 {
+                // Red
+                vid_bits[4 * (im_y * DISPLAY_WIDTH + im_x) + 0] = 0xf8;
+                vid_bits[4 * (im_y * DISPLAY_WIDTH + im_x) + 1] = 0x3b;
+                vid_bits[4 * (im_y * DISPLAY_WIDTH + im_x) + 2] = 0x3a;
+                vid_bits[4 * (im_y * DISPLAY_WIDTH + im_x) + 3] = 0xff;
+            } else {
+                vid_bits[4 * (im_y * DISPLAY_WIDTH + im_x) + 0] = 0xff;
+                vid_bits[4 * (im_y * DISPLAY_WIDTH + im_x) + 1] = 0xff;
+                vid_bits[4 * (im_y * DISPLAY_WIDTH + im_x) + 2] = 0xff;
+                vid_bits[4 * (im_y * DISPLAY_WIDTH + im_x) + 3] = 0xff;
+            }
+        } else {
+            vid_bits[4 * (im_y * DISPLAY_WIDTH + im_x) + 0] = 0x00;
+            vid_bits[4 * (im_y * DISPLAY_WIDTH + im_x) + 1] = 0x00;
+            vid_bits[4 * (im_y * DISPLAY_WIDTH + im_x) + 2] = 0x00;
+            vid_bits[4 * (im_y * DISPLAY_WIDTH + im_x) + 3] = 0xff; // Only set alpha
         }
-        if mem_x == DISPLAY_HEIGHT - 1
-        {
+        if mem_x == (DISPLAY_HEIGHT - 1) {
             mem_y += 1;
         }
         mem_x = (mem_x + 1) % DISPLAY_HEIGHT;
