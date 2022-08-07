@@ -142,7 +142,9 @@ pub struct PortState {
     pub read_port_3: u8,
     pub write_port_1: u8,
     pub write_port_2: u8,
+    pub write_port_3: u8,
     pub write_port_4: u8,
+    pub write_port_5: u8,   
     pub shift_register: u16,
 }
 
@@ -257,7 +259,9 @@ impl MachineState {
                 read_port_3: 0b0000_0000,
                 write_port_1: 0b0000_0000,
                 write_port_2: 0b0000_0000,
+                write_port_3: 0b0000_0000,
                 write_port_4: 0b0000_0000,
+                write_port_5: 0b0000_0000,
                 shift_register: 0b0000_0000,
             })),
             processor_state: ProcessorState::new(),
@@ -275,12 +279,12 @@ impl Default for MachineState {
 
 fn map_keyboard_to_button(key: &str) -> Option<Button> {
     match key {
-        "KeyA" => Some(Button::P1Left),
-        "KeyD" => Some(Button::P1Right),
-        "ArrowLeft" => Some(Button::P2Left),
-        "ArrowRight" => Some(Button::P2Right),
-        "Enter" => Some(Button::P1Shoot),
-        "Space" => Some(Button::P2Shoot),
+        "ArrowLeft" => Some(Button::P1Left),
+        "ArrowRight" => Some(Button::P1Right),
+        "KeyA" => Some(Button::P2Left),
+        "KeyD" => Some(Button::P2Right),
+        "Space" => Some(Button::P1Shoot),
+        "Enter" => Some(Button::P2Shoot),
         "Digit1" => Some(Button::P1Start),
         "Digit2" => Some(Button::P2Start),
         "KeyC" => Some(Button::Coin),
